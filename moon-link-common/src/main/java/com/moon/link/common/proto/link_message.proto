@@ -1,0 +1,45 @@
+// 使用第三版的语法
+syntax = "proto3";
+
+// Protobuf 自己的包名
+package com.moon.link.common.domain.protobuf;
+
+// 生成的 java 类放在这个包下
+option java_package = "com.moon.link.common.domain.protobuf";
+// 表示每个 message 单独生成一个 Java 文件
+option java_multiple_files = true;
+
+message PacketHeader{
+  // app_id：业务线 ID，比如聊天业务、系统通知业务 fixed32 表示固定长度占用 32 / 8 = 4 个字节
+  fixed32 app_id = 1;
+  // uid：当前用户 ID
+  fixed64 uid = 2;
+  // token：用户登录凭证 16 字节
+  string token = 3;
+  // compression：是否压缩，0 不压缩，1 gzip 1 字节
+  int32 compression = 4;
+  // encryption：是否加密，0 不加密，1 AES 1字节
+  int32 encryption = 5;
+  // messageType：消息类型，比如登录、心跳、私聊、群聊 2 字节
+  // 0-客户端登录，1-心跳，2-ack，3-强制下线,4-私聊，
+  // 5-群聊，6-系统消息，7-集群机器连接请求，8-集群机器转发下行消息
+  int32 messageType = 6;
+}
+
+message PacketBody {
+  // from_user_id：发送人 ID
+  int64 from_user_id = 1;
+  // time_stamp：消息时间戳
+  int64 time_stamp = 2;
+  // to_id：接收人 ID
+  int64 to_id = 3;
+  // message_type：业务消息类型
+  int32 message_type = 4;
+  // content：消息内容
+  string content = 5;
+}
+
+message CompleteMessage {
+  PacketHeader packet_header = 1;
+  PacketBody packet_body = 2;
+}
