@@ -1,0 +1,32 @@
+package com.moon.link.common.enums;
+
+public enum MessageType {
+    // 包头数据类型标识，0-登录，1-心跳，2-ack，3-强制下线,4-私聊，5-群聊，6-系统消息，待扩展
+
+    LOGIN_MESSAGE((short) 0),
+    HEARTBEAT_MESSAGE((short) 1),
+    ACK_MESSAGE((short) 2),
+    FORCE_OFFLINE_MESSAGE((short) 3),
+    PRIVATE_CHAT_MESSAGE((short) 4),
+    GROUP_CHAT_MESSAGE((short) 5),
+    SYSTEM_MESSAGE((short) 6);
+
+    private final int type;
+
+    MessageType(int type) {
+        this.type = type;
+    }
+
+    public int getType() {
+        return type;
+    }
+
+    public static MessageType fromType(int type) {
+        for (MessageType value : values()) {
+            if (value.type == type) {
+                return value;
+            }
+        }
+        return null;
+    }
+}
