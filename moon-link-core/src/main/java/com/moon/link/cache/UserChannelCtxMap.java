@@ -39,6 +39,14 @@ public class UserChannelCtxMap {
         return CHANNEL_MAP.get(userId);
     }
 
+    public static boolean contains(Long userId) {
+        return CHANNEL_MAP.containsKey(userId);
+    }
+
+    public static int size() {
+        return CHANNEL_MAP.size();
+    }
+
     /**
      * 移除指定用户ID的映射关系
      * 通常在用户断开连接或会话结束时调用，用于清理资源

@@ -1,11 +1,13 @@
 package com.moon.link.processor;
 
 import com.moon.link.cache.UserChannelCtxMap;
+import com.moon.link.common.constant.ChannelAttrKey;
 import com.moon.link.common.domain.protobuf.CompleteMessage;
 import com.moon.link.common.domain.protobuf.PacketBody;
 import com.moon.link.common.domain.protobuf.PacketHeader;
 import com.moon.link.common.enums.MessageType;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.AttributeKey;
 
 import static com.moon.link.common.enums.MessageType.LOGIN_MESSAGE;
 
@@ -27,6 +29,9 @@ public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
                         .setTimeStamp(System.currentTimeMillis())
                         .build())
                 .build();
+        // 给 ctx 加上对应的 USER_ID
+        AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
+        ctx.channel().attr(userIdKey).set(uid);
         ctx.writeAndFlush(response);
     }
 }
