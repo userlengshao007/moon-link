@@ -6,6 +6,8 @@ import com.moon.link.common.domain.protobuf.CompleteMessage;
 import com.moon.link.common.domain.protobuf.PacketBody;
 import com.moon.link.common.domain.protobuf.PacketHeader;
 import com.moon.link.common.enums.MessageType;
+import com.moon.link.link.LinkConfig;
+import com.moon.link.redis.RedisClient;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.AttributeKey;
 
@@ -33,5 +35,7 @@ public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
         AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
         ctx.channel().attr(userIdKey).set(uid);
         ctx.writeAndFlush(response);
+        // Redis 写入 uid -> machineId 过期时间300秒
+        RedisClient.setUserOnline(uid, LinkConfig.MACHINE_ID);
     }
 }

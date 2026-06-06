@@ -6,6 +6,7 @@ import com.moon.link.common.domain.protobuf.CompleteMessage;
 import com.moon.link.common.enums.MessageType;
 import com.moon.link.processor.AbstractMessageProcessor;
 import com.moon.link.processor.ProcessorFactory;
+import com.moon.link.redis.RedisClient;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.AttributeKey;
@@ -32,6 +33,8 @@ public class LinkChannelHandler extends SimpleChannelInboundHandler<CompleteMess
         Long userId = ctx.channel().attr(userIdKey).get();
         if(userId != null){
             UserChannelCtxMap.remove(userId);
+            // 从 redis 中移除对应信息
+            RedisClient.removeUserOnline(userId);
         }
     }
 

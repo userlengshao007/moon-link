@@ -4,6 +4,8 @@ import com.moon.link.codec.MessageProtocolDecoder;
 import com.moon.link.codec.MessageProtocolEncoder;
 import com.moon.link.common.domain.protobuf.CompleteMessage;
 import com.moon.link.handler.LinkChannelHandler;
+import com.moon.link.link.LinkConfig;
+import com.moon.link.redis.RedisClient;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -21,6 +23,9 @@ public class NettyServer {
     public void start() {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
+        // 生成对应的 机器 ID
+        LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
+        log.info("moon-link machineId: {}", LinkConfig.MACHINE_ID);
 
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
