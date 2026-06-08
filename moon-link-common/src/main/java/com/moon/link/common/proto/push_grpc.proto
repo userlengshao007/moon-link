@@ -1,0 +1,65 @@
+// 定义协议版本为proto3
+syntax = "proto3";
+
+// 指定生成的Java代码包名
+option java_package = "com.moon.link.common.grpc";
+
+/**
+ * 推送服务
+ *
+ * 提供向用户推送消息的gRPC接口
+ */
+service PushService {
+  /**
+   * 向指定用户推送消息
+   *
+   * @param request 推送请求，包含目标用户ID和消息内容
+   * @return response 推送响应，包含响应码、成功状态和消息
+   */
+  rpc Push2User(Push2UserRequest) returns (Push2UserResponse);
+}
+
+/**
+ * 响应状态码枚举
+ *
+ * 定义推送操作可能的返回结果
+ */
+enum ResponseCode {
+  SUCCESS = 0;          // 推送成功
+  USER_OFFLINE = 1;     // 用户离线
+  CHANNEL_INACTIVE = 2; // 通道不可用
+  INTERNAL_ERROR = 3;   // 内部错误
+}
+
+/**
+ * 推送消息体
+ *
+ * 封装要推送的消息内容及相关元数据
+ */
+message PushMessageBody {
+  int64 from_user_id = 1;   // 发送者用户ID
+  int64 time_stamp = 2;     // 消息时间戳（毫秒）
+  int32 message_type = 3;   // 消息类型标识
+  string content = 4;       // 消息内容
+}
+
+/**
+ * 推送请求消息
+ *
+ * 包含推送目标用户和要推送的消息内容
+ */
+message Push2UserRequest {
+  int64 to_id = 1;                  // 接收者用户ID
+  PushMessageBody message = 2;      // 要推送的消息体
+}
+
+/**
+ * 推送响应消息
+ *
+ * 返回推送操作的结果状态
+ */
+message Push2UserResponse {
+  ResponseCode code = 1;    // 响应状态码
+  bool success = 2;         // 是否推送成功
+  string msg = 3;           // 响应描述信息
+}

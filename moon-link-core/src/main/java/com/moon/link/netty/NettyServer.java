@@ -47,6 +47,7 @@ public class NettyServer {
             ChannelFuture future = bootstrap.bind(port).sync();
             log.info("NettyServer started on port {}", port);
 
+            // 当前线程在这里等着，直到 Netty 服务端关闭
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

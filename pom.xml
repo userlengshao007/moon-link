@@ -54,7 +54,7 @@
         <!-- gRPC 依赖 -->
         <dependency>
             <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty</artifactId>
+            <artifactId>grpc-netty-shaded</artifactId>
             <version>1.55.1</version>
         </dependency>
         <dependency>

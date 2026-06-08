@@ -26,6 +26,12 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.25.3</version>
         </dependency>
+
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -46,16 +52,25 @@
                     <protoSourceRoot>
                         ${project.basedir}/src/main/java/com/moon/link/common/proto
                     </protoSourceRoot>
+
                     <protocArtifact>
                         com.google.protobuf:protoc:3.25.3:exe:${os.detected.classifier}
                     </protocArtifact>
+
                     <outputDirectory>${project.basedir}/src/main/java</outputDirectory>
                     <clearOutputDirectory>false</clearOutputDirectory>
+
+                    <pluginId>grpc-java</pluginId>
+                    <pluginArtifact>
+                        io.grpc:protoc-gen-grpc-java:1.55.1:exe:${os.detected.classifier}
+                    </pluginArtifact>
                 </configuration>
+
                 <executions>
                     <execution>
                         <goals>
                             <goal>compile</goal>
+                            <goal>compile-custom</goal>
                         </goals>
                     </execution>
                 </executions>
