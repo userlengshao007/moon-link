@@ -17,6 +17,14 @@ service PushService {
    * @return response 推送响应，包含响应码、成功状态和消息
    */
   rpc Push2User(Push2UserRequest) returns (Push2UserResponse);
+
+  /**
+   * 批量向多个用户推送消息
+   *
+   * @param request 批量推送请求，包含目标用户ID列表和消息内容
+   * @return response 批量推送响应，包含统计结果和每个用户的推送详情
+   */
+  rpc Push2Users(Push2UsersRequest) returns (Push2UsersResponse);
 }
 
 /**
@@ -62,4 +70,38 @@ message Push2UserResponse {
   ResponseCode code = 1;    // 响应状态码
   bool success = 2;         // 是否推送成功
   string msg = 3;           // 响应描述信息
+}
+
+/**
+ * 批量推送请求消息
+ *
+ * 用于向多个用户同时推送同一条消息
+ */
+message Push2UsersRequest {
+  repeated int64 to_ids = 1;        // 接收者用户ID列表
+  PushMessageBody message = 2;      // 要推送的消息体
+}
+
+/**
+ * 批量推送响应消息
+ *
+ * 返回批量推送的统计结果和每个用户的推送详情
+ */
+message Push2UsersResponse {
+  int32 total = 1;                  // 总推送用户数量
+  int32 success_count = 2;          // 成功推送的数量
+  int32 fail_count = 3;             // 失败推送的数量
+  repeated PushResult results = 4;  // 每个用户的推送结果详情
+}
+
+/**
+ * 单个用户推送结果
+ *
+ * 记录向单个用户推送消息的结果状态
+ */
+message PushResult {
+  int64 to_id = 1;              // 接收者用户ID
+  ResponseCode code = 2;        // 推送响应状态码
+  bool success = 3;             // 是否推送成功
+  string msg = 4;               // 推送结果描述信息
 }
