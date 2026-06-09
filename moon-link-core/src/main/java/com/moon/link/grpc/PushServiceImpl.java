@@ -6,6 +6,8 @@ import com.moon.link.common.domain.protobuf.PacketBody;
 import com.moon.link.common.domain.protobuf.PacketHeader;
 import com.moon.link.common.grpc.PushGrpc;
 import com.moon.link.common.grpc.PushServiceGrpc;
+import com.moon.link.link.LinkConfig;
+import com.moon.link.redis.RedisClient;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -45,16 +47,48 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
         // 获取目标用户的Channel上下文
         ChannelHandlerContext ctx = UserChannelCtxMap.get(toId);
 
-        // 用户不在线，返回离线错误
+        // 用户不在线，去查询
         if (ctx == null) {
-            // 发送一个响应消息给客户端
-            responseObserver.onNext(buildResponse(
-                    PushGrpc.ResponseCode.USER_OFFLINE,
-                    false,
-                    "user offline"
-            ));
-            // 标记响应流结束，必须调用
-            responseObserver.onCompleted();
+            Integer targetMachineId = RedisClient.getMachineId(toId);
+
+            if (targetMachineId == null) {
+                responseObserver.onNext(buildResponse(
+                        PushGrpc.ResponseCode.USER_OFFLINE,
+                        false,
+                        "user offline"
+                ));
+                responseObserver.onCompleted();
+                return;
+            }
+
+            if (targetMachineId == LinkConfig.MACHINE_ID) {
+                responseObserver.onNext(buildResponse(
+                        PushGrpc.ResponseCode.CHANNEL_INACTIVE,
+                        false,
+                        "user channel not found in current machine"
+                ));
+                responseObserver.onCompleted();
+                return;
+            }
+
+            try {
+                PushGrpc.Push2UserResponse response = GrpcClientManager
+                        .getBlockingStub(targetMachineId)
+                        .push2User(request);
+
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+            } catch (Exception e) {
+                log.error("forward push failed, toId: {}, targetMachineId: {}", toId, targetMachineId, e);
+
+                responseObserver.onNext(buildResponse(
+                        PushGrpc.ResponseCode.INTERNAL_ERROR,
+                        false,
+                        "forward push failed"
+                ));
+                responseObserver.onCompleted();
+            }
+
             return;
         }
 

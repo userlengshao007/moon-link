@@ -17,7 +17,7 @@ public class GrpcPushTestClient {
     public static void main(String[] args) {
         // 创建gRPC通道，连接到本地10000端口的服务端
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("127.0.0.1", 10000)
+                .forAddress("127.0.0.1", Integer.getInteger("moon.link.grpc.port", 10000))
                 .usePlaintext()
                 .build();
 

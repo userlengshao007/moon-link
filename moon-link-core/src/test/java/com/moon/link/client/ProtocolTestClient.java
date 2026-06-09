@@ -27,7 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ProtocolTestClient {
 
     private static final String HOST = "127.0.0.1";
-    private static final int PORT = 9999;
+    private static final int PORT = Integer.getInteger("moon.link.netty.port", 9999);
     private static final long TEST_UID = 10001L;
 
     /**

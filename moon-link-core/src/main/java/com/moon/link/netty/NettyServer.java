@@ -24,7 +24,15 @@ public class NettyServer {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         // 生成对应的 机器 ID
-        LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
+        // 从系统属性获取 moon.link.machine.id，默认为0 如果大于0 就用配置的，如果为0 就去redis里边生成
+        int configuredMachineId = Integer.getInteger("moon.link.machine.id", 0);
+
+        if (configuredMachineId > 0) {
+            LinkConfig.MACHINE_ID = configuredMachineId;
+        } else {
+            LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
+        }
+
         log.info("moon-link machineId: {}", LinkConfig.MACHINE_ID);
 
         try {
