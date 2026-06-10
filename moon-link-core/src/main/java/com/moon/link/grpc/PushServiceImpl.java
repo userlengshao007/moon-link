@@ -15,7 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -150,28 +152,44 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
             return;
         }
 
-        // 使用线程安全的列表存储推送结果，原子计数器跟踪未完成数量
+        // 使用线程安全的列表存储推送结果
         List<PushGrpc.PushResult> results = Collections.synchronizedList(new ArrayList<>());
-        AtomicInteger remaining = new AtomicInteger(toIds.size());
+        Map<Integer, List<Long>> remoteMachineUsers = new HashMap<>();
+        List<LocalPushTask> localPushTasks = new ArrayList<>();
 
-        // 遍历所有目标用户，逐个推送消息
+        // 先把用户分成三类：本机可推、远程机器转发、直接失败
         for (Long toId : toIds) {
             ChannelHandlerContext ctx = UserChannelCtxMap.get(toId);
 
-            // 用户不在线，记录失败结果
             if (ctx == null) {
-                results.add(buildPushResult(
-                        toId,
-                        PushGrpc.ResponseCode.USER_OFFLINE,
-                        false,
-                        "user offline"
-                ));
+                Integer targetMachineId = RedisClient.getMachineId(toId);
 
-                finishOne(responseObserver, results, remaining);
+                if (targetMachineId == null) {
+                    results.add(buildPushResult(
+                            toId,
+                            PushGrpc.ResponseCode.USER_OFFLINE,
+                            false,
+                            "user offline"
+                    ));
+                    continue;
+                }
+
+                if (targetMachineId == LinkConfig.MACHINE_ID) {
+                    results.add(buildPushResult(
+                            toId,
+                            PushGrpc.ResponseCode.CHANNEL_INACTIVE,
+                            false,
+                            "user channel not found in current machine"
+                    ));
+                    continue;
+                }
+
+                remoteMachineUsers
+                        .computeIfAbsent(targetMachineId, id -> new ArrayList<>())
+                        .add(toId);
                 continue;
             }
 
-            // Channel不可用，记录失败结果
             if (!ctx.channel().isActive()) {
                 results.add(buildPushResult(
                         toId,
@@ -180,25 +198,36 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                         "channel inactive"
                 ));
 
-                finishOne(responseObserver, results, remaining);
                 continue;
             }
 
-            // 构建推送消息并异步发送
-            CompleteMessage pushMessage = buildPushMessage(toId, request.getMessage());
+            localPushTasks.add(new LocalPushTask(toId, ctx));
+        }
 
-            ctx.writeAndFlush(pushMessage).addListener(future -> {
+        int asyncTaskCount = localPushTasks.size() + remoteMachineUsers.size();
+        if (asyncTaskCount == 0) {
+            responseObserver.onNext(buildBatchResponse(results));
+            responseObserver.onCompleted();
+            return;
+        }
+
+        AtomicInteger remaining = new AtomicInteger(asyncTaskCount);
+
+        for (LocalPushTask task : localPushTasks) {
+            CompleteMessage pushMessage = buildPushMessage(task.toId, request.getMessage());
+
+            task.ctx.writeAndFlush(pushMessage).addListener(future -> {
                 // 根据发送结果记录成功或失败
                 if (future.isSuccess()) {
                     results.add(buildPushResult(
-                            toId,
+                            task.toId,
                             PushGrpc.ResponseCode.SUCCESS,
                             true,
                             "push success"
                     ));
                 } else {
                     results.add(buildPushResult(
-                            toId,
+                            task.toId,
                             PushGrpc.ResponseCode.INTERNAL_ERROR,
                             false,
                             "push failed"
@@ -209,6 +238,37 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
             });
         }
 
+        for (Map.Entry<Integer, List<Long>> entry : remoteMachineUsers.entrySet()) {
+            int targetMachineId = entry.getKey();
+            List<Long> remoteUserIds = entry.getValue();
+
+            PushGrpc.Push2UsersRequest forwardRequest = PushGrpc.Push2UsersRequest.newBuilder()
+                    .addAllToIds(remoteUserIds)
+                    .setMessage(request.getMessage())
+                    .build();
+
+            try {
+                PushGrpc.Push2UsersResponse forwardResponse = GrpcClientManager
+                        .getBlockingStub(targetMachineId)
+                        .push2Users(forwardRequest);
+
+                results.addAll(forwardResponse.getResultsList());
+            } catch (Exception e) {
+                log.error("forward batch push failed, targetMachineId: {}, userIds: {}",
+                        targetMachineId, remoteUserIds, e);
+
+                for (Long toId : remoteUserIds) {
+                    results.add(buildPushResult(
+                            toId,
+                            PushGrpc.ResponseCode.INTERNAL_ERROR,
+                            false,
+                            "forward batch push failed"
+                    ));
+                }
+            }
+
+            finishOne(responseObserver, results, remaining);
+        }
     }
 
     /**
@@ -319,5 +379,15 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                         .setTimeStamp(message.getTimeStamp())
                         .build())
                 .build();
+    }
+
+    private static class LocalPushTask {
+        private final long toId;
+        private final ChannelHandlerContext ctx;
+
+        private LocalPushTask(long toId, ChannelHandlerContext ctx) {
+            this.toId = toId;
+            this.ctx = ctx;
+        }
     }
 }

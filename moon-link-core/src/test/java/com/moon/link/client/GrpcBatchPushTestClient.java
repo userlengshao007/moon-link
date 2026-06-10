@@ -9,7 +9,7 @@ public class GrpcBatchPushTestClient {
 
     public static void main(String[] args) {
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("127.0.0.1", 10000)
+                .forAddress("127.0.0.1", Integer.getInteger("moon.link.grpc.port", 10000))
                 .usePlaintext()
                 .build();
 
