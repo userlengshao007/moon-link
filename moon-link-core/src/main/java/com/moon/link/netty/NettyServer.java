@@ -27,11 +27,11 @@ public class NettyServer {
         // 从系统属性获取 moon.link.machine.id，默认为0 如果大于0 就用配置的，如果为0 就去redis里边生成
         int configuredMachineId = Integer.getInteger("moon.link.machine.id", 0);
 
-        if (configuredMachineId > 0) {
-            LinkConfig.MACHINE_ID = configuredMachineId;
-        } else {
-            LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
-        }
+//        if (configuredMachineId > 0) {
+//            LinkConfig.MACHINE_ID = configuredMachineId;
+//        } else {
+//            LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
+//        }
 
         log.info("moon-link machineId: {}", LinkConfig.MACHINE_ID);
 
