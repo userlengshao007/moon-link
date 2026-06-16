@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 协议测试客户端
- * 
+ * <p>
  * 用于测试消息协议的编解码器和消息处理流程。
  * 模拟客户端与服务器建立连接，发送登录请求和心跳消息。
  */
@@ -28,11 +28,14 @@ public class ProtocolTestClient {
 
     private static final String HOST = "127.0.0.1";
     private static final int PORT = Integer.getInteger("moon.link.netty.port", 9999);
-    private static final long TEST_UID = 10001L;
+    private static final long TEST_UID = Long.getLong("moon.link.test.uid", 10001L);
+    private static final long TEST_TO_UID = Long.getLong("moon.link.test.to-id", 10002L);
+    private static final boolean SEND_PRIVATE_CHAT =
+            Boolean.getBoolean("moon.link.test.send-private-chat");
 
     /**
      * 客户端启动入口
-     * 
+     * <p>
      * 创建Netty客户端并连接到服务器，配置编解码器和消息处理器。
      *
      * @param args 命令行参数
@@ -71,7 +74,7 @@ public class ProtocolTestClient {
 
     /**
      * 客户端消息处理器
-     * 
+     * <p>
      * 处理与服务器的消息交互流程：
      * 1. 连接建立后发送登录请求
      * 2. 接收登录响应后发送心跳消息
@@ -93,7 +96,7 @@ public class ProtocolTestClient {
 
         /**
          * 接收到服务器响应消息
-         * 
+         * <p>
          * 根据消息类型进行不同处理：
          * - 登录响应：发送心跳消息
          * - 心跳响应：关闭连接，测试结束
@@ -107,7 +110,6 @@ public class ProtocolTestClient {
             String content = msg.getPacketBody().getContent();
             log.info("client receive response, type: {}, content: {}", messageType, content);
 
-            // 处理登录响应，发送心跳消息
             if (messageType == MessageType.LOGIN_MESSAGE.getType()) {
                 CompleteMessage heartBeatMessage = buildMessage(MessageType.HEARTBEAT_MESSAGE, "ping");
                 log.info("client send heartbeat, uid: {}", TEST_UID);
@@ -115,10 +117,16 @@ public class ProtocolTestClient {
                 return;
             }
 
-            // 处理心跳响应，关闭连接
             if (messageType == MessageType.HEARTBEAT_MESSAGE.getType()) {
-                log.info("heartbeat test finished, keep client online for grpc push test");
-//                ctx.close();
+                log.info("heartbeat test finished, keep client online");
+
+                if (SEND_PRIVATE_CHAT) {
+                    CompleteMessage privateChatMessage =
+                            buildPrivateChatMessage("hello private chat from netty client");
+
+                    log.info("client send private chat, from: {}, to: {}", TEST_UID, TEST_TO_UID);
+                    ctx.writeAndFlush(privateChatMessage);
+                }
             }
         }
 
@@ -136,7 +144,7 @@ public class ProtocolTestClient {
 
         /**
          * 构建完整的消息对象
-         * 
+         * <p>
          * 构造包含消息头（用户ID、Token等）和消息体（内容、时间戳等）的完整消息。
          *
          * @param messageType 消息类型（登录、心跳等）
@@ -159,6 +167,26 @@ public class ProtocolTestClient {
                             .setFromUserId(TEST_UID)
                             .setTimeStamp(System.currentTimeMillis())
                             .setMessageType(messageType.getType())
+                            .setContent(content)
+                            .build())
+                    .build();
+        }
+
+        private CompleteMessage buildPrivateChatMessage(String content) {
+            return CompleteMessage.newBuilder()
+                    .setPacketHeader(PacketHeader.newBuilder()
+                            .setAppId(1)
+                            .setUid(TEST_UID)
+                            .setToken("test-token")
+                            .setCompression(0)
+                            .setEncryption(0)
+                            .setMessageType(MessageType.PRIVATE_CHAT_MESSAGE.getType())
+                            .build())
+                    .setPacketBody(PacketBody.newBuilder()
+                            .setFromUserId(TEST_UID)
+                            .setToId(TEST_TO_UID)
+                            .setTimeStamp(System.currentTimeMillis())
+                            .setMessageType(MessageType.PRIVATE_CHAT_MESSAGE.getType())
                             .setContent(content)
                             .build())
                     .build();
