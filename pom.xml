@@ -14,6 +14,7 @@
         <module>moon-link-bootstrap</module>
         <module>moon-link-common</module>
         <module>moon-link-core</module>
+        <module>moon-im-server</module>
     </modules>
 
     <properties>

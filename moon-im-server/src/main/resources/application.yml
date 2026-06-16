@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: moon-im-server
+  kafka:
+    bootstrap-servers: ${MOON_KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    consumer:
+      group-id: moon-im-server
+      auto-offset-reset: latest
+      enable-auto-commit: true
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+
+moon-im:
+  kafka:
+    private-chat-topic: private_chat
+
+moon-link:
+  grpc:
+    host: ${MOON_LINK_GRPC_HOST:127.0.0.1}
+    port: ${MOON_LINK_GRPC_PORT:10000}
