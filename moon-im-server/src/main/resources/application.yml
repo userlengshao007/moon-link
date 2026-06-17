@@ -9,6 +9,20 @@ spring:
       enable-auto-commit: true
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MOON_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/moon-im?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${MOON_MYSQL_USERNAME:root}
+    password: ${MOON_MYSQL_PASSWORD:}
+  redis:
+    host: ${MOON_REDIS_HOST:127.0.0.1}
+    port: ${MOON_REDIS_PORT:6379}
+    password: ${MOON_REDIS_PASSWORD:}
+    database: ${MOON_REDIS_DATABASE:0}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
 
 moon-im:
   kafka:
