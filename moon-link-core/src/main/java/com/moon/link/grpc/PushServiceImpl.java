@@ -156,37 +156,16 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
         List<PushGrpc.PushResult> results = Collections.synchronizedList(new ArrayList<>());
         Map<Integer, List<Long>> remoteMachineUsers = new HashMap<>();
         List<LocalPushTask> localPushTasks = new ArrayList<>();
+        List<Long> needQueryRedisUserIds = new ArrayList<>();
 
-        // 先把用户分成三类：本机可推、远程机器转发、直接失败
+        // 第一轮只判断本机内存里的 channel。
+        // 本机存在活跃 channel 的用户可以直接推送；本机找不到的用户先收集起来，
+        // 后面统一用 Redis Pipeline 批量查询用户所在机器，避免循环里逐个访问 Redis。
         for (Long toId : toIds) {
             ChannelHandlerContext ctx = UserChannelCtxMap.get(toId);
 
             if (ctx == null) {
-                Integer targetMachineId = RedisClient.getMachineId(toId);
-
-                if (targetMachineId == null) {
-                    results.add(buildPushResult(
-                            toId,
-                            PushGrpc.ResponseCode.USER_OFFLINE,
-                            false,
-                            "user offline"
-                    ));
-                    continue;
-                }
-
-                if (targetMachineId == LinkConfig.MACHINE_ID) {
-                    results.add(buildPushResult(
-                            toId,
-                            PushGrpc.ResponseCode.CHANNEL_INACTIVE,
-                            false,
-                            "user channel not found in current machine"
-                    ));
-                    continue;
-                }
-
-                remoteMachineUsers
-                        .computeIfAbsent(targetMachineId, id -> new ArrayList<>())
-                        .add(toId);
+                needQueryRedisUserIds.add(toId);
                 continue;
             }
 
@@ -202,6 +181,40 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
             }
 
             localPushTasks.add(new LocalPushTask(toId, ctx));
+        }
+
+        // 第二轮批量查询 Redis，把不在本机内存中的用户分成：
+        // 1. Redis 查不到：用户离线
+        // 2. Redis 显示在当前机器：本机 channel 丢失或不可用
+        // 3. Redis 显示在其他机器：按目标机器分组，后面通过 gRPC 批量转发
+        List<Integer> machineIds = RedisClient.batchGetMachineId(needQueryRedisUserIds);
+        for (int i = 0; i < needQueryRedisUserIds.size(); i++) {
+            Long toId = needQueryRedisUserIds.get(i);
+            Integer targetMachineId = machineIds.get(i);
+
+            if (targetMachineId == null) {
+                results.add(buildPushResult(
+                        toId,
+                        PushGrpc.ResponseCode.USER_OFFLINE,
+                        false,
+                        "user offline"
+                ));
+                continue;
+            }
+
+            if (targetMachineId == LinkConfig.MACHINE_ID) {
+                results.add(buildPushResult(
+                        toId,
+                        PushGrpc.ResponseCode.CHANNEL_INACTIVE,
+                        false,
+                        "user channel not found in current machine"
+                ));
+                continue;
+            }
+
+            remoteMachineUsers
+                    .computeIfAbsent(targetMachineId, id -> new ArrayList<>())
+                    .add(toId);
         }
 
         int asyncTaskCount = localPushTasks.size() + remoteMachineUsers.size();

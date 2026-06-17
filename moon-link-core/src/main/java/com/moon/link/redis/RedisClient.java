@@ -5,8 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Response;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @Slf4j
 public class RedisClient {
@@ -91,6 +96,49 @@ public class RedisClient {
         } catch (Exception e) {
             log.warn("[Redis] get machine id failed, userId: {}, error: {}", userId, e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * 批量查询用户所在机器ID。
+     * <p>
+     * 批量推送时如果逐个调用 Redis GET，1000 个用户就会产生 1000 次网络往返。
+     * Pipeline 会把多个 GET 命令一次性发给 Redis，再统一读取结果，从而减少网络 IO。
+     * 返回结果的顺序和 userIds 的顺序保持一致，方便调用方按下标对应用户。
+     *
+     * @param userIds 用户ID列表
+     * @return 每个用户对应的机器ID；用户不在线或查询失败时对应位置为 null
+     */
+    public static List<Integer> batchGetMachineId(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try (Jedis jedis = JEDIS_POOL.getResource()) {
+            Pipeline pipeline = jedis.pipelined();
+            List<Response<String>> responses = new ArrayList<>(userIds.size());
+
+            // 先把所有 GET 命令放进 pipeline，这里只是排队，不会立即等待每条命令返回。
+            for (Long userId : userIds) {
+                responses.add(pipeline.get(userKey(userId)));
+            }
+
+            // sync 会把 pipeline 中排队的命令批量发送给 Redis，并一次性取回结果。
+            pipeline.sync();
+
+            List<Integer> machineIds = new ArrayList<>(responses.size());
+            for (Response<String> response : responses) {
+                String machineId = response.get();
+                machineIds.add(machineId == null ? null : Integer.parseInt(machineId));
+            }
+
+            return machineIds;
+        } catch (Exception e) {
+            log.warn("[Redis] batch get machine id failed, size: {}, error: {}",
+                    userIds.size(), e.getMessage());
+
+            // 出现异常时保持返回列表长度一致，调用方仍然可以按下标处理为离线。
+            return new ArrayList<>(Collections.nCopies(userIds.size(), null));
         }
     }
 
