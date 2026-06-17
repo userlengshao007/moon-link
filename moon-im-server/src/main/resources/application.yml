@@ -27,6 +27,8 @@ mybatis-plus:
 moon-im:
   kafka:
     private-chat-topic: private_chat
+    user-online-topic: user_online
+    user-online-group-id: moon-im-user-online
 
 moon-link:
   grpc:

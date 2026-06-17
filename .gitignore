@@ -1,0 +1,10 @@
+.idea/
+target/
+**/target/
+
+# Local secrets and machine-specific Spring Boot config.
+*.env
+.env
+.env.*
+application-local.yml
+application-*.local.yml

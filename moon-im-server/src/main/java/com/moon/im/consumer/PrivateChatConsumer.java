@@ -1,6 +1,7 @@
 package com.moon.im.consumer;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.moon.im.constant.MessagePushStatus;
 import com.moon.im.domain.SingleChatMessage;
 import com.moon.im.mapper.SingleChatMessageMapper;
 import com.moon.link.common.domain.protobuf.CompleteMessage;
@@ -24,9 +25,6 @@ import java.time.LocalDateTime;
 @Component
 public class PrivateChatConsumer {
 
-    private static final int STATUS_SAVED = 0;
-    private static final int STATUS_PUSH_SUCCESS = 1;
-    private static final int STATUS_PUSH_FAILED = 2;
     private static final String SINGLE_CHAT_SEQ_KEY_PREFIX = "moon:im:single:seq:";
 
     /**
@@ -85,11 +83,13 @@ public class PrivateChatConsumer {
 
         try {
             PushGrpc.Push2UserResponse response = pushServiceBlockingStub.push2User(request);
-            updatePushStatus(chatMessage, response.getSuccess() ? STATUS_PUSH_SUCCESS : STATUS_PUSH_FAILED);
+            updatePushStatus(chatMessage, response.getSuccess()
+                    ? MessagePushStatus.PUSH_SUCCESS
+                    : MessagePushStatus.PUSH_FAILED);
             log.info("push private chat result, toId: {}, success: {}, code: {}, msg: {}",
                     toId, response.getSuccess(), response.getCode(), response.getMsg());
         } catch (Exception e) {
-            updatePushStatus(chatMessage, STATUS_PUSH_FAILED);
+            updatePushStatus(chatMessage, MessagePushStatus.PUSH_FAILED);
             log.error("push private chat failed, from: {}, to: {}", fromUserId, toId, e);
         }
     }
@@ -110,7 +110,7 @@ public class PrivateChatConsumer {
         chatMessage.setToUserId(toId);
         chatMessage.setContent(content);
         chatMessage.setMessageType(messageType);
-        chatMessage.setStatus(STATUS_SAVED);
+        chatMessage.setStatus(MessagePushStatus.SAVED);
         chatMessage.setKafkaTopic(record.topic());
         chatMessage.setKafkaPartition(record.partition());
         chatMessage.setKafkaOffset(record.offset());
