@@ -13,7 +13,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${MOON_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/moon-im?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${MOON_MYSQL_USERNAME:root}
-    password: ${MOON_MYSQL_PASSWORD:}
+    password: ${MOON_MYSQL_PASSWORD:wsnbb1234}
   redis:
     host: ${MOON_REDIS_HOST:127.0.0.1}
     port: ${MOON_REDIS_PORT:6379}
