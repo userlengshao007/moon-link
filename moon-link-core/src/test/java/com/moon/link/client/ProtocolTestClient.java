@@ -15,7 +15,10 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.ScheduledFuture;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * 协议测试客户端
@@ -32,6 +35,8 @@ public class ProtocolTestClient {
     private static final long TEST_TO_UID = Long.getLong("moon.link.test.to-id", 10002L);
     private static final boolean SEND_PRIVATE_CHAT =
             Boolean.getBoolean("moon.link.test.send-private-chat");
+    private static final int HEARTBEAT_INTERVAL_SECONDS =
+            Integer.getInteger("moon.link.test.heartbeat-interval-seconds", 30);
 
     /**
      * 客户端启动入口
@@ -82,6 +87,9 @@ public class ProtocolTestClient {
      */
     private static class ClientMessageHandler extends SimpleChannelInboundHandler<CompleteMessage> {
 
+        private ScheduledFuture<?> heartbeatFuture;
+        private boolean privateChatSent;
+
         /**
          * 连接激活时触发，发送登录请求
          *
@@ -111,16 +119,15 @@ public class ProtocolTestClient {
             log.info("client receive response, type: {}, content: {}", messageType, content);
 
             if (messageType == MessageType.LOGIN_MESSAGE.getType()) {
-                CompleteMessage heartBeatMessage = buildMessage(MessageType.HEARTBEAT_MESSAGE, "ping");
-                log.info("client send heartbeat, uid: {}", TEST_UID);
-                ctx.writeAndFlush(heartBeatMessage);
+                startHeartbeat(ctx);
                 return;
             }
 
             if (messageType == MessageType.HEARTBEAT_MESSAGE.getType()) {
-                log.info("heartbeat test finished, keep client online");
+                log.info("client receive heartbeat pong, keep online, uid: {}", TEST_UID);
 
-                if (SEND_PRIVATE_CHAT) {
+                if (SEND_PRIVATE_CHAT && !privateChatSent) {
+                    privateChatSent = true;
                     CompleteMessage privateChatMessage =
                             buildPrivateChatMessage("hello private chat from netty client");
 
@@ -128,6 +135,55 @@ public class ProtocolTestClient {
                     ctx.writeAndFlush(privateChatMessage);
                 }
             }
+        }
+
+        /**
+         * 登录成功后启动定时心跳。
+         * <p>
+         * 这里使用当前 Channel 所属的 EventLoop 定时执行，不额外创建线程。
+         * 只要客户端持续发送心跳，服务端的 IdleStateHandler 就不会误判连接读空闲。
+         */
+        private void startHeartbeat(ChannelHandlerContext ctx) {
+            if (HEARTBEAT_INTERVAL_SECONDS <= 0) {
+                log.info("client heartbeat disabled, uid: {}", TEST_UID);
+                return;
+            }
+
+            if (heartbeatFuture != null && !heartbeatFuture.isCancelled()) {
+                return;
+            }
+
+            sendHeartbeat(ctx);
+            heartbeatFuture = ctx.executor().scheduleAtFixedRate(
+                    () -> sendHeartbeat(ctx),
+                    HEARTBEAT_INTERVAL_SECONDS,
+                    HEARTBEAT_INTERVAL_SECONDS,
+                    TimeUnit.SECONDS
+            );
+
+            log.info("client heartbeat scheduled, uid: {}, intervalSeconds: {}",
+                    TEST_UID, HEARTBEAT_INTERVAL_SECONDS);
+        }
+
+        private void sendHeartbeat(ChannelHandlerContext ctx) {
+            if (!ctx.channel().isActive()) {
+                return;
+            }
+
+            CompleteMessage heartBeatMessage = buildMessage(MessageType.HEARTBEAT_MESSAGE, "ping");
+            log.info("client send heartbeat, uid: {}", TEST_UID);
+            ctx.writeAndFlush(heartBeatMessage);
+        }
+
+        /**
+         * 连接关闭时取消定时任务，避免 channel 已经断开后还继续提交心跳写入。
+         */
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            if (heartbeatFuture != null) {
+                heartbeatFuture.cancel(false);
+            }
+            super.channelInactive(ctx);
         }
 
         /**
