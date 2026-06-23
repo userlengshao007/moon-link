@@ -8,7 +8,11 @@ import com.moon.link.handler.ServerIdleStateHandler;
 import com.moon.link.link.LinkConfig;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -24,8 +28,9 @@ public class NettyServer {
     }
 
     public void start() {
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        NettyTransport transport = createTransport();
+        EventLoopGroup bossGroup = transport.bossGroup;
+        EventLoopGroup workerGroup = transport.workerGroup;
         // 生成对应的 机器 ID
         // 从系统属性获取 moon.link.machine.id，默认为0 如果大于0 就用配置的，如果为0 就去redis里边生成
         int configuredMachineId = Integer.getInteger("moon.link.machine.id", 0);
@@ -42,7 +47,7 @@ public class NettyServer {
             ServerBootstrap bootstrap = new ServerBootstrap();
 
             bootstrap.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
+                    .channel(transport.serverSocketChannelClass)
                     .option(ChannelOption.SO_BACKLOG, 1024)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -67,7 +72,7 @@ public class NettyServer {
                     });
 
             ChannelFuture future = bootstrap.bind(port).sync();
-            log.info("NettyServer started on port {}", port);
+            log.info("NettyServer started on port {}, transport: {}", port, transport.name);
 
             // 当前线程在这里等着，直到 Netty 服务端关闭
             future.channel().closeFuture().sync();
@@ -80,5 +85,49 @@ public class NettyServer {
         }
     }
 
+    private NettyTransport createTransport() {
+        // Epoll 是 Linux 专属的高性能 IO 模型。这里先判断配置开关，再判断当前环境是否真的可用。
+        if (NettyConfig.EPOLL_ENABLED && Epoll.isAvailable()) {
+            log.info("Netty transport use Epoll");
+            return new NettyTransport(
+                    "epoll",
+                    new EpollEventLoopGroup(1),
+                    new EpollEventLoopGroup(),
+                    EpollServerSocketChannel.class
+            );
+        }
+
+        if (NettyConfig.EPOLL_ENABLED) {
+            Throwable cause = Epoll.unavailabilityCause();
+            log.info("Netty Epoll unavailable, fallback to NIO, cause: {}",
+                    cause == null ? "unknown" : cause.toString());
+        } else {
+            log.info("Netty Epoll disabled by config, use NIO");
+        }
+
+        return new NettyTransport(
+                "nio",
+                new NioEventLoopGroup(1),
+                new NioEventLoopGroup(),
+                NioServerSocketChannel.class
+        );
+    }
+
+    private static class NettyTransport {
+        private final String name;
+        private final EventLoopGroup bossGroup;
+        private final EventLoopGroup workerGroup;
+        private final Class<? extends ServerSocketChannel> serverSocketChannelClass;
+
+        private NettyTransport(String name,
+                               EventLoopGroup bossGroup,
+                               EventLoopGroup workerGroup,
+                               Class<? extends ServerSocketChannel> serverSocketChannelClass) {
+            this.name = name;
+            this.bossGroup = bossGroup;
+            this.workerGroup = workerGroup;
+            this.serverSocketChannelClass = serverSocketChannelClass;
+        }
+    }
 
 }
