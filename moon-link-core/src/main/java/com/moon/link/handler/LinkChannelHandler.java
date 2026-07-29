@@ -11,7 +11,16 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.AttributeKey;
 
+/**
+ * 长连接业务分发入口，并在连接关闭时统一清理本地和 Redis 在线状态。
+ */
 public class LinkChannelHandler extends SimpleChannelInboundHandler<CompleteMessage> {
+    /**
+     * 根据协议头中的消息类型选择处理器。
+     *
+     * @param ctx Channel 上下文
+     * @param msg 已解码的完整消息
+     */
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, CompleteMessage msg) throws Exception {
         int type = msg.getPacketHeader().getMessageType();
@@ -26,18 +35,29 @@ public class LinkChannelHandler extends SimpleChannelInboundHandler<CompleteMess
         processor.process(ctx, msg);
     }
 
+    /**
+     * 连接关闭后清理用户与 Channel 的映射及跨节点在线路由。
+     *
+     * @param ctx Channel 上下文
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         // 当链接断开的时候，删除对应 map 中的元素
         AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
         Long userId = ctx.channel().attr(userIdKey).get();
-        if(userId != null){
+        if (userId != null) {
             UserChannelCtxMap.remove(userId);
             // 从 redis 中移除对应信息
             RedisClient.removeUserOnline(userId);
         }
     }
 
+    /**
+     * 发生未处理异常时关闭连接，后续由 {@link #channelInactive(ChannelHandlerContext)} 完成清理。
+     *
+     * @param ctx Channel 上下文
+     * @param cause 异常原因
+     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         ctx.close();

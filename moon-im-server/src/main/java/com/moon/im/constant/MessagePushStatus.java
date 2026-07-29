@@ -1,5 +1,8 @@
 package com.moon.im.constant;
 
+/**
+ * 单聊消息从持久化到推送完成过程中的状态值。
+ */
 public final class MessagePushStatus {
 
     public static final int SAVED = 0;

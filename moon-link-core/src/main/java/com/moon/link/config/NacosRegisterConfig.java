@@ -4,7 +4,10 @@ import com.alibaba.nacos.api.PropertyKeyConst;
 
 import java.util.Properties;
 
-public class NacosRegisterConfig {
+/**
+ * Nacos 注册中心地址、服务名和实例元数据键配置。
+ */
+public final class NacosRegisterConfig {
     public static final String SERVER_ADDR =
             System.getProperty("moon.link.nacos.server-addr", "127.0.0.1:8848");
 
@@ -21,5 +24,8 @@ public class NacosRegisterConfig {
 
     static {
         PROPERTIES.put(PropertyKeyConst.SERVER_ADDR, SERVER_ADDR);
+    }
+
+    private NacosRegisterConfig() {
     }
 }

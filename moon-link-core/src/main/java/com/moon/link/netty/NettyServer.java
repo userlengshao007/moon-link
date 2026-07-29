@@ -6,6 +6,7 @@ import com.moon.link.config.NettyConfig;
 import com.moon.link.handler.LinkChannelHandler;
 import com.moon.link.handler.ServerIdleStateHandler;
 import com.moon.link.link.LinkConfig;
+import com.moon.link.redis.RedisClient;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.epoll.Epoll;
@@ -20,26 +21,41 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Netty server 类
+ *
+ * @author zhangyujie
+ * @date 2026/07/27
+ */
 @Slf4j
 public class NettyServer {
+    /** 服务监听端口。 */
     private final int port;
-    public NettyServer(int port){
+
+    /**
+     * 创建 Netty 长连接服务器。
+     *
+     * @param port 服务监听端口
+     */
+    public NettyServer(int port) {
         this.port = port;
     }
 
+    /**
+     * 初始化传输模型和 ChannelPipeline，绑定端口并阻塞至服务关闭。
+     */
     public void start() {
         NettyTransport transport = createTransport();
         EventLoopGroup bossGroup = transport.bossGroup;
         EventLoopGroup workerGroup = transport.workerGroup;
-        // 生成对应的 机器 ID
-        // 从系统属性获取 moon.link.machine.id，默认为0 如果大于0 就用配置的，如果为0 就去redis里边生成
+        // 优先使用显式配置的机器 ID；未配置时借助 Redis 自增键保证集群内唯一。
         int configuredMachineId = Integer.getInteger("moon.link.machine.id", 0);
 
-//        if (configuredMachineId > 0) {
-//            LinkConfig.MACHINE_ID = configuredMachineId;
-//        } else {
-//            LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
-//        }
+        if (configuredMachineId > 0) {
+            LinkConfig.MACHINE_ID = configuredMachineId;
+        } else {
+            LinkConfig.MACHINE_ID = RedisClient.generateMachineId();
+        }
 
         log.info("moon-link machineId: {}", LinkConfig.MACHINE_ID);
 
@@ -51,6 +67,11 @@ public class NettyServer {
                     .option(ChannelOption.SO_BACKLOG, 1024)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
+                        /**
+                         * 为新连接安装空闲检测、协议编解码和业务处理器。
+                         *
+                         * @param ch 新建立的客户端连接
+                         */
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ch.pipeline()
@@ -85,6 +106,11 @@ public class NettyServer {
         }
     }
 
+    /**
+     * 根据配置与运行环境选择 Linux Epoll 或通用 NIO 传输实现。
+     *
+     * @return 已创建事件循环组的传输配置
+     */
     private NettyTransport createTransport() {
         // Epoll 是 Linux 专属的高性能 IO 模型。这里先判断配置开关，再判断当前环境是否真的可用。
         if (NettyConfig.EPOLL_ENABLED && Epoll.isAvailable()) {
@@ -113,6 +139,9 @@ public class NettyServer {
         );
     }
 
+    /**
+     * 封装同一传输模型所需的事件循环组和服务端 Channel 类型。
+     */
     private static class NettyTransport {
         private final String name;
         private final EventLoopGroup bossGroup;

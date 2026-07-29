@@ -14,10 +14,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Nacos 注册中心适配器，负责注册当前节点并监听集群成员变化。
+ */
 public class NacosRegisterCenter {
 
+    /** Nacos 命名服务客户端。 */
     private NamingService namingService;
 
+    /**
+     * 创建命名服务客户端，并携带机器 ID、gRPC 端口和 Netty 端口注册当前实例。
+     *
+     * @throws Exception Nacos 客户端初始化或注册失败时抛出
+     */
     public void init() throws Exception {
         namingService = NamingFactory.createNamingService(NacosRegisterConfig.PROPERTIES);
 
@@ -26,6 +35,7 @@ public class NacosRegisterCenter {
         instance.setPort(GrpcConfig.GRPC_PORT);
         instance.setServiceName(NacosRegisterConfig.SERVICE_NAME);
 
+        // 元数据用于其他节点构建 machineId 到 gRPC 地址的路由表。
         Map<String, String> metadata = new HashMap<>();
         metadata.put(NacosRegisterConfig.MACHINE_ID_KEY, String.valueOf(LinkConfig.MACHINE_ID));
         metadata.put(NacosRegisterConfig.GRPC_PORT_KEY, String.valueOf(GrpcConfig.GRPC_PORT));
@@ -39,6 +49,12 @@ public class NacosRegisterCenter {
         );
     }
 
+    /**
+     * 订阅服务实例变化，并在订阅完成后主动发送一次当前全量实例。
+     *
+     * @param listener 集群实例监听器
+     * @throws Exception 订阅或首次查询实例失败时抛出
+     */
     public void subscribe(RegisterCenterListener listener) throws Exception {
         namingService.subscribe(
                 NacosRegisterConfig.SERVICE_NAME,
@@ -61,6 +77,7 @@ public class NacosRegisterCenter {
                 }
         );
 
+        // Nacos 订阅不会保证立即回调，因此主动加载一次，避免启动初期路由表为空。
         List<Instance> instances = namingService.getAllInstances(
                 NacosRegisterConfig.SERVICE_NAME,
                 NacosRegisterConfig.DEFAULT_GROUP

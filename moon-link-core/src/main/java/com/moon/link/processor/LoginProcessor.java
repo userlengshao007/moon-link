@@ -18,14 +18,18 @@ import java.nio.charset.StandardCharsets;
 
 import static com.moon.link.common.enums.MessageType.LOGIN_MESSAGE;
 
+/**
+ * 登录消息处理器，建立用户在线路由并发布上线事件。
+ */
 @Slf4j
 public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
+    /** {@inheritDoc} */
     @Override
     public void process(ChannelHandlerContext ctx, CompleteMessage msg) {
-        // 获取用户id
+        // 先建立本地映射并绑定 Channel 属性，保证断连时能够定位并清理该用户。
         long uid = msg.getPacketHeader().getUid();
 
-        UserChannelCtxMap.add(uid,ctx);
+        UserChannelCtxMap.add(uid, ctx);
 
         CompleteMessage response = CompleteMessage.newBuilder()
                 .setPacketHeader(PacketHeader.newBuilder()
@@ -37,15 +41,19 @@ public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
                         .setTimeStamp(System.currentTimeMillis())
                         .build())
                 .build();
-        // 给 ctx 加上对应的 USER_ID
         AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
         ctx.channel().attr(userIdKey).set(uid);
         ctx.writeAndFlush(response);
-        // Redis 写入 uid -> machineId 过期时间300秒
+        // 写入跨节点路由后发布上线事件，触发 IM 服务进行离线消息补偿。
         RedisClient.setUserOnline(uid, LinkConfig.MACHINE_ID);
         sendUserOnlineEvent(uid);
     }
 
+    /**
+     * 异步发布用户上线事件，生产失败仅记录告警，不中断已完成的登录流程。
+     *
+     * @param uid 用户 ID
+     */
     private void sendUserOnlineEvent(long uid) {
         ProducerRecord<String, byte[]> record = new ProducerRecord<>(
                 KafkaConfig.USER_ONLINE_TOPIC,

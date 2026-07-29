@@ -10,7 +10,11 @@ import io.netty.util.AttributeKey;
 
 import static com.moon.link.common.enums.MessageType.HEARTBEAT_MESSAGE;
 
+/**
+ * 心跳处理器，响应 pong 并按固定频率刷新用户在线状态。
+ */
 public class HeartBeatProcessor extends AbstractMessageProcessor<CompleteMessage> {
+    /** {@inheritDoc} */
     @Override
     public void process(ChannelHandlerContext ctx, CompleteMessage msg) {
         long uid = msg.getPacketHeader().getUid();
@@ -20,7 +24,7 @@ public class HeartBeatProcessor extends AbstractMessageProcessor<CompleteMessage
         long heartBeatTimes = lastTimes == null ? 1 : lastTimes + 1;
         ctx.channel().attr(heartBeatTimesKey).set(heartBeatTimes);
 
-        // 每三次心跳做一个续期
+        // 不必每次心跳都访问 Redis；每三次续期可降低高连接数下的写压力。
         if (heartBeatTimes % 3 == 0) {
             RedisClient.expireUserOnline(uid);
         }

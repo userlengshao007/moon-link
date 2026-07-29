@@ -12,10 +12,19 @@ import java.util.zip.CRC32;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-public class ProtoUtil {
+/**
+ * 自定义协议使用的校验、压缩和 AES 加解密工具。
+ */
+public final class ProtoUtil {
     private static final String AES_ALGORITHM = "AES/CBC/PKCS5Padding";
     private static final int IV_LENGTH = 16; // 128-bit IV
 
+    /**
+     * 计算消息体的 CRC32 校验值。
+     *
+     * @param data 原始字节
+     * @return CRC32 校验值
+     */
     public static int calculateChecksum(byte[] data) {
         CRC32 crc32 = new CRC32();
         crc32.update(data);
@@ -107,6 +116,12 @@ public class ProtoUtil {
         }
     }
 
+    /**
+     * 将任意长度密钥归一化为 256 位 AES 密钥。
+     *
+     * @param key 原始密钥
+     * @return AES 密钥描述
+     */
     private static SecretKeySpec validateKey(byte[] key) {
         // 自动处理不同长度的密钥（128/192/256位）
         byte[] validKey = new byte[32]; // 默认256位
@@ -114,16 +129,29 @@ public class ProtoUtil {
         return new SecretKeySpec(validKey, "AES");
     }
 
+    /**
+     * 生成每次加密独立使用的随机 IV。
+     *
+     * @return 128 位 IV
+     */
     private static byte[] generateIV() {
         byte[] iv = new byte[IV_LENGTH];
         new SecureRandom().nextBytes(iv);
         return iv;
     }
 
-    // 辅助方法：生成随机密钥
+    /**
+     * 生成指定长度的 AES 随机密钥。
+     *
+     * @param keySize 密钥位数
+     * @return 随机密钥字节
+     */
     public static byte[] generateAESKey(int keySize) {
-        byte[] key = new byte[keySize/8];
+        byte[] key = new byte[keySize / 8];
         new SecureRandom().nextBytes(key);
         return key;
+    }
+
+    private ProtoUtil() {
     }
 }

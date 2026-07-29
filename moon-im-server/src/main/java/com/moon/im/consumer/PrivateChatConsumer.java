@@ -94,6 +94,16 @@ public class PrivateChatConsumer {
         }
     }
 
+    /**
+     * 先为会话分配递增序号，再保存消息和 Kafka 位点，便于追踪及离线补推。
+     *
+     * @param record 原始 Kafka 消息
+     * @param fromUserId 发送者用户 ID
+     * @param toId 接收者用户 ID
+     * @param content 消息内容
+     * @param messageType 消息类型
+     * @return 已保存且带数据库主键的消息
+     */
     private SingleChatMessage savePrivateChatMessage(ConsumerRecord<String, byte[]> record,
                                                      long fromUserId,
                                                      long toId,
@@ -124,18 +134,37 @@ public class PrivateChatConsumer {
         return chatMessage;
     }
 
+    /**
+     * 根据本次 gRPC 推送结果更新消息状态。
+     *
+     * @param chatMessage 已持久化消息
+     * @param status 新状态
+     */
     private void updatePushStatus(SingleChatMessage chatMessage, int status) {
         chatMessage.setStatus(status);
         chatMessage.setUpdateTime(LocalDateTime.now());
         singleChatMessageMapper.updateById(chatMessage);
     }
 
+    /**
+     * 按用户 ID 排序生成稳定的双人会话 ID，保证收发方向不影响会话归属。
+     *
+     * @param fromUserId 发送者用户 ID
+     * @param toId 接收者用户 ID
+     * @return 双人会话 ID
+     */
     private String buildCid(long fromUserId, long toId) {
         long minUserId = Math.min(fromUserId, toId);
         long maxUserId = Math.max(fromUserId, toId);
         return minUserId + "_" + maxUserId;
     }
 
+    /**
+     * 通过 Redis 原子自增获取会话内下一个消息序号。
+     *
+     * @param cid 会话 ID
+     * @return 新消息序号
+     */
     private Long nextSeqId(String cid) {
         String key = SINGLE_CHAT_SEQ_KEY_PREFIX + cid;
         return stringRedisTemplate.opsForValue().increment(key);

@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 支持在服务器端通过用户ID快速获取对应的网络连接上下文，
  * 实现消息推送、连接管理等功能。
  */
-public class UserChannelCtxMap {
+public final class UserChannelCtxMap {
     /**
      * 存储用户ID与频道上下文的映射关系
      * Key: 用户ID (Long类型)
@@ -39,10 +39,21 @@ public class UserChannelCtxMap {
         return CHANNEL_MAP.get(userId);
     }
 
+    /**
+     * 判断用户是否连接到当前节点。
+     *
+     * @param userId 用户 ID
+     * @return 本地是否存在该用户连接
+     */
     public static boolean contains(Long userId) {
         return CHANNEL_MAP.containsKey(userId);
     }
 
+    /**
+     * 获取当前节点维护的用户连接数。
+     *
+     * @return 本地连接数
+     */
     public static int size() {
         return CHANNEL_MAP.size();
     }
@@ -55,5 +66,8 @@ public class UserChannelCtxMap {
      */
     public static void remove(Long userId) {
         CHANNEL_MAP.remove(userId);
+    }
+
+    private UserChannelCtxMap() {
     }
 }

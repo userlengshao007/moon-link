@@ -14,8 +14,11 @@ import java.util.Collections;
 import java.util.List;
 
 @Slf4j
-public class RedisClient {
-    // 用 jedis 来操作 不用 redisTemplate，因为 RedisTemplate 是依赖 SpringBoot 的
+/**
+ * 基于 Jedis 的 Redis 访问入口，负责节点编号和用户在线路由。
+ */
+public final class RedisClient {
+    /** 独立于 Spring 容器的共享 Jedis 连接池。 */
     public static final JedisPool JEDIS_POOL = buildPool();
 
     /**
@@ -49,6 +52,12 @@ public class RedisClient {
         return new JedisPool(poolConfig, RedisConfig.REDIS_HOST, RedisConfig.REDIS_PORT,
                 RedisConfig.REDIS_TIMEOUT_MILLIS, RedisConfig.REDIS_PASSWORD);
     }
+
+    /**
+     * 通过 Redis 原子自增为当前节点分配机器 ID。
+     *
+     * @return 新机器 ID；Redis 不可用时降级为 1
+     */
     public static int generateMachineId() {
         try (Jedis jedis = JEDIS_POOL.getResource()) {
             Long id = jedis.incr(RedisConfig.MACHINE_ID_KEY);
@@ -59,6 +68,13 @@ public class RedisClient {
         }
     }
 
+    /**
+     * 写入用户当前所在节点，并设置在线状态过期时间。
+     *
+     * @param userId 用户 ID
+     * @param machineId 节点机器 ID
+     * @return 写入是否成功
+     */
     public static boolean setUserOnline(long userId, int machineId) {
         try (Jedis jedis = JEDIS_POOL.getResource()) {
             jedis.setex(userKey(userId), RedisConfig.ONLINE_EXPIRE_SECONDS, String.valueOf(machineId));
@@ -70,6 +86,12 @@ public class RedisClient {
         }
     }
 
+    /**
+     * 刷新用户在线状态的过期时间。
+     *
+     * @param userId 用户 ID
+     * @return 是否成功刷新
+     */
     public static boolean expireUserOnline(long userId) {
         try (Jedis jedis = JEDIS_POOL.getResource()) {
             return jedis.expire(userKey(userId), RedisConfig.ONLINE_EXPIRE_SECONDS) == 1;
@@ -79,6 +101,12 @@ public class RedisClient {
         }
     }
 
+    /**
+     * 删除用户在线路由。
+     *
+     * @param userId 用户 ID
+     * @return 删除操作是否成功
+     */
     public static boolean removeUserOnline(long userId) {
         try (Jedis jedis = JEDIS_POOL.getResource()) {
             jedis.del(userKey(userId));
@@ -89,6 +117,12 @@ public class RedisClient {
         }
     }
 
+    /**
+     * 查询用户当前所在节点。
+     *
+     * @param userId 用户 ID
+     * @return 节点机器 ID；用户离线或查询失败时返回 {@code null}
+     */
     public static Integer getMachineId(long userId) {
         try (Jedis jedis = JEDIS_POOL.getResource()) {
             String machineId = jedis.get(userKey(userId));
@@ -146,5 +180,6 @@ public class RedisClient {
         return RedisConfig.PREFIX_USER_ID + userId;
     }
 
-
+    private RedisClient() {
+    }
 }

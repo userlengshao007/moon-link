@@ -18,6 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ServerIdleStateHandler extends ChannelInboundHandlerAdapter {
 
+    /**
+     * 仅处理读空闲事件；其他用户事件继续沿 Pipeline 传播。
+     *
+     * @param ctx Channel 上下文
+     * @param evt Netty 用户事件
+     * @throws Exception 事件向后传播失败时抛出
+     */
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (!(evt instanceof IdleStateEvent idleStateEvent)) {

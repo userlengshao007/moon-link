@@ -302,6 +302,12 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
         }
     }
 
+    /**
+     * 将单用户 gRPC 请求转换为长连接协议消息。
+     *
+     * @param request 单用户推送请求
+     * @return 长连接消息
+     */
     private CompleteMessage buildPushMessage(PushGrpc.Push2UserRequest request) {
         return buildPushMessage(request.getToId(), request.getMessage());
     }
@@ -327,6 +333,14 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                 .build();
     }
 
+    /**
+     * 构建单用户推送响应。
+     *
+     * @param code 响应码
+     * @param success 是否成功
+     * @param msg 结果说明
+     * @return 单用户推送响应
+     */
     private PushGrpc.Push2UserResponse buildResponse(PushGrpc.ResponseCode code,
                                                      boolean success,
                                                      String msg) {
@@ -394,10 +408,17 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                 .build();
     }
 
+    /**
+     * 已解析出的本地用户推送任务。
+     */
     private static class LocalPushTask {
         private final long toId;
         private final ChannelHandlerContext ctx;
 
+        /**
+         * @param toId 接收者用户 ID
+         * @param ctx 接收者当前 Channel 上下文
+         */
         private LocalPushTask(long toId, ChannelHandlerContext ctx) {
             this.toId = toId;
             this.ctx = ctx;

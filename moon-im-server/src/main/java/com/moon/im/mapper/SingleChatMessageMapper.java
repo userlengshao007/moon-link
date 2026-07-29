@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.moon.im.domain.SingleChatMessage;
 import org.apache.ibatis.annotations.Mapper;
 
+/**
+ * 单聊消息表的数据访问接口。
+ */
 @Mapper
 public interface SingleChatMessageMapper extends BaseMapper<SingleChatMessage> {
 }

@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 用户上线事件消费者，负责补推该用户离线期间未成功送达的私聊消息。
+ */
 @Slf4j
 @Component
 public class UserOnlineConsumer {
@@ -22,12 +25,23 @@ public class UserOnlineConsumer {
     private final SingleChatMessageService singleChatMessageService;
     private final PushServiceGrpc.PushServiceBlockingStub pushServiceBlockingStub;
 
+    /**
+     * 创建用户上线事件消费者。
+     *
+     * @param singleChatMessageService 单聊消息服务
+     * @param pushServiceBlockingStub 长连接推送服务客户端
+     */
     public UserOnlineConsumer(SingleChatMessageService singleChatMessageService,
                               PushServiceGrpc.PushServiceBlockingStub pushServiceBlockingStub) {
         this.singleChatMessageService = singleChatMessageService;
         this.pushServiceBlockingStub = pushServiceBlockingStub;
     }
 
+    /**
+     * 消费用户上线事件，并按时间顺序补推一批失败消息。
+     *
+     * @param record 用户上线 Kafka 消息
+     */
     @KafkaListener(
             topics = "${moon-im.kafka.user-online-topic:user_online}",
             groupId = "${moon-im.kafka.user-online-group-id:moon-im-user-online}"
@@ -38,6 +52,7 @@ public class UserOnlineConsumer {
             return;
         }
 
+        // 每次只处理有限数量，防止单个用户积压过多时长时间占用消费线程。
         List<SingleChatMessage> messages =
                 singleChatMessageService.listUnpushedMessages(userId, COMPENSATE_LIMIT);
         if (messages.isEmpty()) {
@@ -53,6 +68,12 @@ public class UserOnlineConsumer {
         }
     }
 
+    /**
+     * 从上线事件载荷中解析用户 ID。
+     *
+     * @param record Kafka 消息
+     * @return 用户 ID；消息非法时返回 {@code null}
+     */
     private Long parseUserId(ConsumerRecord<String, byte[]> record) {
         try {
             String payload = new String(record.value(), StandardCharsets.UTF_8);
@@ -64,6 +85,11 @@ public class UserOnlineConsumer {
         }
     }
 
+    /**
+     * 调用长连接服务补推一条消息，并在成功后更新持久化状态。
+     *
+     * @param message 待补推消息
+     */
     private void compensateOne(SingleChatMessage message) {
         PushGrpc.Push2UserRequest request = PushGrpc.Push2UserRequest.newBuilder()
                 .setToId(message.getToUserId())

@@ -1,6 +1,10 @@
 package com.moon.link.config;
 
-public class NettyConfig {
+/**
+ * Netty 长连接服务配置。
+ */
+public final class NettyConfig {
+    /** Netty 服务监听端口，可通过系统属性覆盖。 */
     public static final int NETTY_PORT = Integer.getInteger("moon.link.netty.port", 9999);
 
     /**
@@ -20,4 +24,7 @@ public class NettyConfig {
      */
     public static final int READER_IDLE_SECONDS =
             Integer.getInteger("moon.link.netty.reader-idle-seconds", 90);
+
+    private NettyConfig() {
+    }
 }

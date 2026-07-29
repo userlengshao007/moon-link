@@ -8,10 +8,13 @@ import io.grpc.ManagedChannelBuilder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class GrpcClientManager {
-    // 缓存机器ID到gRPC通道的映射，避免重复创建连接
+/**
+ * 节点间 gRPC 客户端缓存，按机器 ID 复用 Channel 和 Stub。
+ */
+public final class GrpcClientManager {
+    /** 机器 ID 到 gRPC Channel 的缓存，避免重复建立连接。 */
     private static final Map<Integer, ManagedChannel> CHANNEL_MAP = new ConcurrentHashMap<>();
-    // 缓存机器ID到gRPC存根的映射，提供线程安全的访问
+    /** 机器 ID 到阻塞式 Stub 的线程安全缓存。 */
     private static final Map<Integer, PushServiceGrpc.PushServiceBlockingStub> STUB_MAP = new ConcurrentHashMap<>();
 
     /**
@@ -63,5 +66,8 @@ public class GrpcClientManager {
                     .usePlaintext()
                     .build();
         });
+    }
+
+    private GrpcClientManager() {
     }
 }
