@@ -22,7 +22,7 @@ public class MessageProtocolDecoder extends ByteToMessageDecoder {
      * 解码
      *
      * @param ctx 上下文环境
-     * @param in 输入缓冲区
+     * @param in  输入缓冲区
      * @param out 输出列表
      * @throws Exception
      */

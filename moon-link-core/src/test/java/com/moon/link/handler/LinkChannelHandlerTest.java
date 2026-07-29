@@ -8,6 +8,7 @@ import com.moon.link.common.enums.MessageType;
 import io.netty.channel.embedded.EmbeddedChannel;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -16,7 +17,6 @@ public class LinkChannelHandlerTest {
     @Test
     public void loginThenCloseShouldRemoveUserChannelMapping() {
         long uid = 10001L;
-        UserChannelCtxMap.remove(uid);
         EmbeddedChannel channel = new EmbeddedChannel(new LinkChannelHandler());
 
         channel.writeInbound(buildLoginMessage(uid));
@@ -24,6 +24,27 @@ public class LinkChannelHandlerTest {
 
         channel.close();
 
+        assertFalse(UserChannelCtxMap.contains(uid));
+    }
+
+    @Test
+    public void repeatLoginShouldKeepNewChannelMappingWhenOldChannelCloses() {
+        long uid = 10002L;
+        EmbeddedChannel oldChannel = new EmbeddedChannel(new LinkChannelHandler());
+        EmbeddedChannel newChannel = new EmbeddedChannel(new LinkChannelHandler());
+
+        oldChannel.writeInbound(buildLoginMessage(uid));
+        newChannel.writeInbound(buildLoginMessage(uid));
+
+        assertFalse(oldChannel.isOpen());
+        assertTrue(newChannel.isOpen());
+        assertEquals(newChannel.pipeline().context(LinkChannelHandler.class), UserChannelCtxMap.get(uid));
+
+        oldChannel.close();
+
+        assertEquals(newChannel.pipeline().context(LinkChannelHandler.class), UserChannelCtxMap.get(uid));
+
+        newChannel.close();
         assertFalse(UserChannelCtxMap.contains(uid));
     }
 

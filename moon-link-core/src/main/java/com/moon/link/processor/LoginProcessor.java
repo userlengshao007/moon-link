@@ -26,10 +26,26 @@ public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
     /** {@inheritDoc} */
     @Override
     public void process(ChannelHandlerContext ctx, CompleteMessage msg) {
-        // 先建立本地映射并绑定 Channel 属性，保证断连时能够定位并清理该用户。
         long uid = msg.getPacketHeader().getUid();
+        AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
+        Long boundUserId = ctx.channel().attr(userIdKey).get();
 
-        UserChannelCtxMap.add(uid, ctx);
+        // 一个连接不允许在登录后切换用户，避免遗留旧用户的 Channel 映射。
+        if (boundUserId != null && boundUserId != uid) {
+            log.warn("channel repeat login with different user, boundUserId: {}, requestedUserId: {}, remoteAddress: {}",
+                    boundUserId, uid, ctx.channel().remoteAddress());
+            ctx.close();
+            return;
+        }
+
+        // 先标记新连接，再原子替换本地映射。旧连接随后断开时，条件删除不会误删新连接。
+        ctx.channel().attr(userIdKey).set(uid);
+        ChannelHandlerContext oldContext = UserChannelCtxMap.replace(uid, ctx);
+        if (oldContext != null && oldContext != ctx) {
+            log.info("replace old user connection, userId: {}, oldRemoteAddress: {}, newRemoteAddress: {}",
+                    uid, oldContext.channel().remoteAddress(), ctx.channel().remoteAddress());
+            oldContext.close();
+        }
 
         CompleteMessage response = CompleteMessage.newBuilder()
                 .setPacketHeader(PacketHeader.newBuilder()
@@ -41,8 +57,6 @@ public class LoginProcessor extends AbstractMessageProcessor<CompleteMessage> {
                         .setTimeStamp(System.currentTimeMillis())
                         .build())
                 .build();
-        AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
-        ctx.channel().attr(userIdKey).set(uid);
         ctx.writeAndFlush(response);
         // 写入跨节点路由后发布上线事件，触发 IM 服务进行离线消息补偿。
         RedisClient.setUserOnline(uid, LinkConfig.MACHINE_ID);

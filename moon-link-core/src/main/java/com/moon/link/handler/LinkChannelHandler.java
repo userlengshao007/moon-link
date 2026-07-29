@@ -46,10 +46,13 @@ public class LinkChannelHandler extends SimpleChannelInboundHandler<CompleteMess
         AttributeKey<Long> userIdKey = AttributeKey.valueOf(ChannelAttrKey.USER_ID);
         Long userId = ctx.channel().attr(userIdKey).get();
         if (userId != null) {
-            UserChannelCtxMap.remove(userId);
-            // 从 redis 中移除对应信息
-            RedisClient.removeUserOnline(userId);
+            // 只有当前断开的 Channel 仍是用户有效连接时，才允许清理在线路由。
+            boolean removed = UserChannelCtxMap.remove(userId, ctx);
+            if (removed) {
+                RedisClient.removeUserOnline(userId);
+            }
         }
+        super.channelInactive(ctx);
     }
 
     /**
