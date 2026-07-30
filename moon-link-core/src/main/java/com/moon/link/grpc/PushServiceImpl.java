@@ -9,7 +9,6 @@ import com.moon.link.common.grpc.PushServiceGrpc;
 import com.moon.link.link.LinkConfig;
 import com.moon.link.redis.RedisClient;
 import io.grpc.stub.StreamObserver;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,177 +20,228 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 推送服务实现类
- * <p>
- * 实现gRPC推送服务，提供向用户推送消息的功能。
- * 通过Netty Channel将消息推送到目标用户的WebSocket连接。
+ * 推送服务。
+ *
+ * <p>{@code Push2User(s)} 是业务层调用的路由接口，负责定位用户所在节点并允许一次重路由；
+ * {@code PushLocalUser(s)} 是节点间调用的本地接口，只访问当前节点的 Channel Map。</p>
  */
 @Slf4j
 public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
+
     /**
-     * 向指定用户推送消息
-     * <p>
-     * 处理流程：
-     * 1. 检查目标用户是否在线（是否存在Channel上下文）
-     * 2. 检查Channel是否处于活跃状态
-     * 3. 构建推送消息并发送
-     * 4. 根据发送结果返回成功或失败响应
-     *
-     * @param request          推送请求，包含目标用户ID和消息内容
-     * @param responseObserver gRPC响应观察者，用于异步返回推送结果
+     * 路由并推送给单个用户。
      */
     @Override
     public void push2User(PushGrpc.Push2UserRequest request,
                           StreamObserver<PushGrpc.Push2UserResponse> responseObserver) {
-
-        long toId = request.getToId();
-
-        // 获取目标用户的Channel上下文
-        ChannelHandlerContext ctx = UserChannelCtxMap.get(toId);
-
-        // 用户不在线，去查询
-        if (ctx == null) {
-            Integer targetMachineId = RedisClient.getMachineId(toId);
-
-            if (targetMachineId == null) {
-                responseObserver.onNext(buildResponse(
-                        PushGrpc.ResponseCode.USER_OFFLINE,
-                        false,
-                        "user offline"
-                ));
-                responseObserver.onCompleted();
-                return;
-            }
-
-            if (targetMachineId == LinkConfig.MACHINE_ID) {
-                responseObserver.onNext(buildResponse(
-                        PushGrpc.ResponseCode.CHANNEL_INACTIVE,
-                        false,
-                        "user channel not found in current machine"
-                ));
-                responseObserver.onCompleted();
-                return;
-            }
-
-            try {
-                PushGrpc.Push2UserResponse response = GrpcClientManager
-                        .getBlockingStub(targetMachineId)
-                        .push2User(request);
-
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
-            } catch (Exception e) {
-                log.error("forward push failed, toId: {}, targetMachineId: {}", toId, targetMachineId, e);
-
-                responseObserver.onNext(buildResponse(
-                        PushGrpc.ResponseCode.INTERNAL_ERROR,
-                        false,
-                        "forward push failed"
-                ));
-                responseObserver.onCompleted();
-            }
-
+        ChannelHandlerContext localContext = UserChannelCtxMap.get(request.getToId());
+        if (localContext != null && localContext.channel().isActive()) {
+            pushLocalUser(request, responseObserver);
             return;
         }
 
-        // Channel不可用，返回通道错误
-        if (!ctx.channel().isActive()) {
-            responseObserver.onNext(buildResponse(
+        routeSingleUser(request, responseObserver);
+    }
+
+    /**
+     * 仅向当前节点上的用户推送，不查询 Redis，也不向其他节点转发。
+     */
+    @Override
+    public void pushLocalUser(PushGrpc.Push2UserRequest request,
+                              StreamObserver<PushGrpc.Push2UserResponse> responseObserver) {
+        long toId = request.getToId();
+        ChannelHandlerContext context = UserChannelCtxMap.get(toId);
+        if (context == null || !context.channel().isActive()) {
+            complete(responseObserver, buildResponse(
                     PushGrpc.ResponseCode.CHANNEL_INACTIVE,
                     false,
-                    "channel inactive"
+                    "user channel not found or inactive in current machine"
             ));
-            responseObserver.onCompleted();
             return;
         }
 
-        // 构建完整的推送消息
-        CompleteMessage pushMessage = buildPushMessage(request);
-
-        // 异步发送消息到客户端
-        ChannelFuture future = ctx.writeAndFlush(pushMessage);
-
-        // 监听发送结果并返回响应
-        future.addListener(f -> {
-            if (f.isSuccess()) {
-                responseObserver.onNext(buildResponse(
+        context.writeAndFlush(buildPushMessage(toId, request.getMessage())).addListener(future -> {
+            if (future.isSuccess()) {
+                complete(responseObserver, buildResponse(
                         PushGrpc.ResponseCode.SUCCESS,
                         true,
                         "push success"
                 ));
-            } else {
-                log.error("push message failed, toId: {}", toId, f.cause());
-                responseObserver.onNext(buildResponse(
-                        PushGrpc.ResponseCode.INTERNAL_ERROR,
-                        false,
-                        "push failed"
-                ));
+                return;
             }
 
-            responseObserver.onCompleted();
+            log.error("push local message failed, toId: {}", toId, future.cause());
+            complete(responseObserver, buildResponse(
+                    PushGrpc.ResponseCode.INTERNAL_ERROR,
+                    false,
+                    "push failed"
+            ));
         });
     }
 
     /**
-     * 发送信息给指定多个用户
-     *
-     * @param request
-     * @param responseObserver
+     * 路由并批量推送给多个用户。
      */
     @Override
-    public void push2Users(PushGrpc.Push2UsersRequest request, StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
+    public void push2Users(PushGrpc.Push2UsersRequest request,
+                           StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
         List<Long> toIds = request.getToIdsList();
-
-        if (toIds == null || toIds.isEmpty()) {
-            responseObserver.onNext(PushGrpc.Push2UsersResponse.newBuilder()
-                    .setTotal(0)
-                    .setSuccessCount(0)
-                    .setFailCount(0)
-                    .build());
-            responseObserver.onCompleted();
+        if (toIds.isEmpty()) {
+            complete(responseObserver, buildBatchResponse(Collections.emptyList()));
             return;
         }
 
-        // 使用线程安全的列表存储推送结果
         List<PushGrpc.PushResult> results = Collections.synchronizedList(new ArrayList<>());
-        Map<Integer, List<Long>> remoteMachineUsers = new HashMap<>();
-        List<LocalPushTask> localPushTasks = new ArrayList<>();
-        List<Long> needQueryRedisUserIds = new ArrayList<>();
+        RoutingPlan routingPlan = buildInitialRoutingPlan(toIds, results);
+        int taskCount = routingPlan.localTasks.size() + routingPlan.remoteMachineUsers.size();
+        if (taskCount == 0) {
+            complete(responseObserver, buildBatchResponse(results));
+            return;
+        }
 
-        // 第一轮只判断本机内存里的 channel。
-        // 本机存在活跃 channel 的用户可以直接推送；本机找不到的用户先收集起来，
-        // 后面统一用 Redis Pipeline 批量查询用户所在机器，避免循环里逐个访问 Redis。
-        for (Long toId : toIds) {
-            ChannelHandlerContext ctx = UserChannelCtxMap.get(toId);
+        AtomicInteger remaining = new AtomicInteger(taskCount);
+        scheduleLocalTasks(
+                routingPlan.localTasks,
+                request.getMessage(),
+                results,
+                remaining,
+                responseObserver
+        );
 
-            if (ctx == null) {
-                needQueryRedisUserIds.add(toId);
-                continue;
-            }
+        for (Map.Entry<Integer, List<Long>> entry : routingPlan.remoteMachineUsers.entrySet()) {
+            forwardLocalBatchWithRetry(
+                    entry.getKey(),
+                    entry.getValue(),
+                    request.getMessage(),
+                    results,
+                    remaining,
+                    responseObserver
+            );
+        }
+    }
 
-            if (!ctx.channel().isActive()) {
+    /**
+     * 仅向当前节点上的多个用户推送，不查询 Redis，也不向其他节点转发。
+     */
+    @Override
+    public void pushLocalUsers(PushGrpc.Push2UsersRequest request,
+                               StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
+        List<PushGrpc.PushResult> results = Collections.synchronizedList(new ArrayList<>());
+        List<LocalPushTask> localTasks = new ArrayList<>();
+
+        for (Long toId : request.getToIdsList()) {
+            ChannelHandlerContext context = UserChannelCtxMap.get(toId);
+            if (context == null || !context.channel().isActive()) {
                 results.add(buildPushResult(
                         toId,
                         PushGrpc.ResponseCode.CHANNEL_INACTIVE,
                         false,
-                        "channel inactive"
+                        "user channel not found or inactive in current machine"
                 ));
-
                 continue;
             }
-
-            localPushTasks.add(new LocalPushTask(toId, ctx));
+            localTasks.add(new LocalPushTask(toId, context));
         }
 
-        // 第二轮批量查询 Redis，把不在本机内存中的用户分成：
-        // 1. Redis 查不到：用户离线
-        // 2. Redis 显示在当前机器：本机 channel 丢失或不可用
-        // 3. Redis 显示在其他机器：按目标机器分组，后面通过 gRPC 批量转发
+        if (localTasks.isEmpty()) {
+            complete(responseObserver, buildBatchResponse(results));
+            return;
+        }
+
+        scheduleLocalTasks(
+                localTasks,
+                request.getMessage(),
+                results,
+                new AtomicInteger(localTasks.size()),
+                responseObserver
+        );
+    }
+
+    private void routeSingleUser(PushGrpc.Push2UserRequest request,
+                                 StreamObserver<PushGrpc.Push2UserResponse> responseObserver) {
+        long toId = request.getToId();
+        Integer targetMachineId = RedisClient.getMachineId(toId);
+        if (targetMachineId == null) {
+            complete(responseObserver, buildResponse(
+                    PushGrpc.ResponseCode.USER_OFFLINE,
+                    false,
+                    "user offline"
+            ));
+            return;
+        }
+
+        if (targetMachineId == LinkConfig.MACHINE_ID) {
+            pushLocalUser(request, responseObserver);
+            return;
+        }
+
+        PushGrpc.Push2UserResponse firstResponse = forwardLocalUser(request, targetMachineId);
+        if (firstResponse.getCode() != PushGrpc.ResponseCode.CHANNEL_INACTIVE) {
+            complete(responseObserver, firstResponse);
+            return;
+        }
+
+        // 目标节点本地 Channel 已失效时，只允许入口节点重新查 Redis 并重路由一次。
+        Integer retryMachineId = RedisClient.getMachineId(toId);
+        if (retryMachineId == null) {
+            complete(responseObserver, buildResponse(
+                    PushGrpc.ResponseCode.USER_OFFLINE,
+                    false,
+                    "user offline after reroute"
+            ));
+            return;
+        }
+
+        if (retryMachineId == LinkConfig.MACHINE_ID) {
+            pushLocalUser(request, responseObserver);
+            return;
+        }
+
+        if (retryMachineId.equals(targetMachineId)) {
+            complete(responseObserver, firstResponse);
+            return;
+        }
+
+        complete(responseObserver, forwardLocalUser(request, retryMachineId));
+    }
+
+    private PushGrpc.Push2UserResponse forwardLocalUser(PushGrpc.Push2UserRequest request,
+                                                        int targetMachineId) {
+        try {
+            return GrpcClientManager.getBlockingStub(targetMachineId).pushLocalUser(request);
+        } catch (Exception e) {
+            log.error("forward local push failed, toId: {}, targetMachineId: {}",
+                    request.getToId(), targetMachineId, e);
+            return buildResponse(
+                    PushGrpc.ResponseCode.INTERNAL_ERROR,
+                    false,
+                    "forward local push failed"
+            );
+        }
+    }
+
+    private RoutingPlan buildInitialRoutingPlan(List<Long> toIds,
+                                                List<PushGrpc.PushResult> results) {
+        RoutingPlan plan = new RoutingPlan();
+        List<Long> needQueryRedisUserIds = new ArrayList<>();
+
+        for (Long toId : toIds) {
+            ChannelHandlerContext context = UserChannelCtxMap.get(toId);
+            if (context == null) {
+                needQueryRedisUserIds.add(toId);
+                continue;
+            }
+            if (!context.channel().isActive()) {
+                needQueryRedisUserIds.add(toId);
+                continue;
+            }
+            plan.localTasks.add(new LocalPushTask(toId, context));
+        }
+
         List<Integer> machineIds = RedisClient.batchGetMachineId(needQueryRedisUserIds);
         for (int i = 0; i < needQueryRedisUserIds.size(); i++) {
-            Long toId = needQueryRedisUserIds.get(i);
+            long toId = needQueryRedisUserIds.get(i);
             Integer targetMachineId = machineIds.get(i);
-
             if (targetMachineId == null) {
                 results.add(buildPushResult(
                         toId,
@@ -199,38 +249,153 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                         false,
                         "user offline"
                 ));
-                continue;
-            }
-
-            if (targetMachineId == LinkConfig.MACHINE_ID) {
+            } else if (targetMachineId == LinkConfig.MACHINE_ID) {
                 results.add(buildPushResult(
                         toId,
                         PushGrpc.ResponseCode.CHANNEL_INACTIVE,
                         false,
                         "user channel not found in current machine"
                 ));
+            } else {
+                plan.remoteMachineUsers
+                        .computeIfAbsent(targetMachineId, key -> new ArrayList<>())
+                        .add(toId);
+            }
+        }
+        return plan;
+    }
+
+    private void forwardLocalBatchWithRetry(int targetMachineId,
+                                            List<Long> userIds,
+                                            PushGrpc.PushMessageBody message,
+                                            List<PushGrpc.PushResult> results,
+                                            AtomicInteger remaining,
+                                            StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
+        PushGrpc.Push2UsersResponse response = forwardLocalUsers(targetMachineId, userIds, message);
+        List<Long> inactiveUserIds = new ArrayList<>();
+        for (PushGrpc.PushResult result : response.getResultsList()) {
+            if (result.getCode() == PushGrpc.ResponseCode.CHANNEL_INACTIVE) {
+                inactiveUserIds.add(result.getToId());
+            } else {
+                results.add(result);
+            }
+        }
+
+        if (!inactiveUserIds.isEmpty()) {
+            scheduleBatchReroute(
+                    targetMachineId,
+                    inactiveUserIds,
+                    message,
+                    results,
+                    remaining,
+                    responseObserver
+            );
+        }
+        finishOne(responseObserver, results, remaining);
+    }
+
+    private void scheduleBatchReroute(int previousMachineId,
+                                      List<Long> userIds,
+                                      PushGrpc.PushMessageBody message,
+                                      List<PushGrpc.PushResult> results,
+                                      AtomicInteger remaining,
+                                      StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
+        RoutingPlan retryPlan = new RoutingPlan();
+        List<Integer> retryMachineIds = RedisClient.batchGetMachineId(userIds);
+
+        for (int i = 0; i < userIds.size(); i++) {
+            long toId = userIds.get(i);
+            Integer retryMachineId = retryMachineIds.get(i);
+            if (retryMachineId == null) {
+                results.add(buildPushResult(
+                        toId,
+                        PushGrpc.ResponseCode.USER_OFFLINE,
+                        false,
+                        "user offline after reroute"
+                ));
                 continue;
             }
 
-            remoteMachineUsers
-                    .computeIfAbsent(targetMachineId, id -> new ArrayList<>())
+            if (retryMachineId == LinkConfig.MACHINE_ID) {
+                ChannelHandlerContext context = UserChannelCtxMap.get(toId);
+                if (context != null && context.channel().isActive()) {
+                    retryPlan.localTasks.add(new LocalPushTask(toId, context));
+                } else {
+                    results.add(buildPushResult(
+                            toId,
+                            PushGrpc.ResponseCode.CHANNEL_INACTIVE,
+                            false,
+                            "user channel not found in current machine"
+                    ));
+                }
+                continue;
+            }
+
+            if (retryMachineId == previousMachineId) {
+                results.add(buildPushResult(
+                        toId,
+                        PushGrpc.ResponseCode.CHANNEL_INACTIVE,
+                        false,
+                        "user channel still inactive in target machine"
+                ));
+                continue;
+            }
+
+            retryPlan.remoteMachineUsers
+                    .computeIfAbsent(retryMachineId, key -> new ArrayList<>())
                     .add(toId);
         }
 
-        int asyncTaskCount = localPushTasks.size() + remoteMachineUsers.size();
-        if (asyncTaskCount == 0) {
-            responseObserver.onNext(buildBatchResponse(results));
-            responseObserver.onCompleted();
-            return;
+        int retryTaskCount = retryPlan.localTasks.size() + retryPlan.remoteMachineUsers.size();
+        remaining.addAndGet(retryTaskCount);
+        scheduleLocalTasks(
+                retryPlan.localTasks,
+                message,
+                results,
+                remaining,
+                responseObserver
+        );
+
+        for (Map.Entry<Integer, List<Long>> entry : retryPlan.remoteMachineUsers.entrySet()) {
+            PushGrpc.Push2UsersResponse retryResponse =
+                    forwardLocalUsers(entry.getKey(), entry.getValue(), message);
+            results.addAll(retryResponse.getResultsList());
+            finishOne(responseObserver, results, remaining);
         }
+    }
 
-        AtomicInteger remaining = new AtomicInteger(asyncTaskCount);
+    private PushGrpc.Push2UsersResponse forwardLocalUsers(int targetMachineId,
+                                                          List<Long> userIds,
+                                                          PushGrpc.PushMessageBody message) {
+        PushGrpc.Push2UsersRequest request = PushGrpc.Push2UsersRequest.newBuilder()
+                .addAllToIds(userIds)
+                .setMessage(message)
+                .build();
+        try {
+            return GrpcClientManager.getBlockingStub(targetMachineId).pushLocalUsers(request);
+        } catch (Exception e) {
+            log.error("forward local batch push failed, targetMachineId: {}, userIds: {}",
+                    targetMachineId, userIds, e);
+            List<PushGrpc.PushResult> failedResults = new ArrayList<>();
+            for (Long toId : userIds) {
+                failedResults.add(buildPushResult(
+                        toId,
+                        PushGrpc.ResponseCode.INTERNAL_ERROR,
+                        false,
+                        "forward local batch push failed"
+                ));
+            }
+            return buildBatchResponse(failedResults);
+        }
+    }
 
-        for (LocalPushTask task : localPushTasks) {
-            CompleteMessage pushMessage = buildPushMessage(task.toId, request.getMessage());
-
-            task.ctx.writeAndFlush(pushMessage).addListener(future -> {
-                // 根据发送结果记录成功或失败
+    private void scheduleLocalTasks(List<LocalPushTask> tasks,
+                                    PushGrpc.PushMessageBody message,
+                                    List<PushGrpc.PushResult> results,
+                                    AtomicInteger remaining,
+                                    StreamObserver<PushGrpc.Push2UsersResponse> responseObserver) {
+        for (LocalPushTask task : tasks) {
+            task.context.writeAndFlush(buildPushMessage(task.toId, message)).addListener(future -> {
                 if (future.isSuccess()) {
                     results.add(buildPushResult(
                             task.toId,
@@ -239,6 +404,7 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                             "push success"
                     ));
                 } else {
+                    log.error("push local message failed, toId: {}", task.toId, future.cause());
                     results.add(buildPushResult(
                             task.toId,
                             PushGrpc.ResponseCode.INTERNAL_ERROR,
@@ -246,158 +412,62 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                             "push failed"
                     ));
                 }
-
                 finishOne(responseObserver, results, remaining);
             });
         }
-
-        for (Map.Entry<Integer, List<Long>> entry : remoteMachineUsers.entrySet()) {
-            int targetMachineId = entry.getKey();
-            List<Long> remoteUserIds = entry.getValue();
-
-            PushGrpc.Push2UsersRequest forwardRequest = PushGrpc.Push2UsersRequest.newBuilder()
-                    .addAllToIds(remoteUserIds)
-                    .setMessage(request.getMessage())
-                    .build();
-
-            try {
-                PushGrpc.Push2UsersResponse forwardResponse = GrpcClientManager
-                        .getBlockingStub(targetMachineId)
-                        .push2Users(forwardRequest);
-
-                results.addAll(forwardResponse.getResultsList());
-            } catch (Exception e) {
-                log.error("forward batch push failed, targetMachineId: {}, userIds: {}",
-                        targetMachineId, remoteUserIds, e);
-
-                for (Long toId : remoteUserIds) {
-                    results.add(buildPushResult(
-                            toId,
-                            PushGrpc.ResponseCode.INTERNAL_ERROR,
-                            false,
-                            "forward batch push failed"
-                    ));
-                }
-            }
-
-            finishOne(responseObserver, results, remaining);
-        }
     }
 
-    /**
-     * 完成一个用户的推送后检查是否全部完成
-     * 
-     * 使用原子计数器递减，当所有推送都完成后才返回响应。
-     *
-     * @param responseObserver gRPC响应观察者
-     * @param results 所有推送结果列表
-     * @param remaining 剩余未完成推送数量的原子计数器
-     */
     private void finishOne(StreamObserver<PushGrpc.Push2UsersResponse> responseObserver,
                            List<PushGrpc.PushResult> results,
                            AtomicInteger remaining) {
         if (remaining.decrementAndGet() == 0) {
-            responseObserver.onNext(buildBatchResponse(results));
-            responseObserver.onCompleted();
+            complete(responseObserver, buildBatchResponse(results));
         }
     }
 
-    /**
-     * 将单用户 gRPC 请求转换为长连接协议消息。
-     *
-     * @param request 单用户推送请求
-     * @return 长连接消息
-     */
-    private CompleteMessage buildPushMessage(PushGrpc.Push2UserRequest request) {
-        return buildPushMessage(request.getToId(), request.getMessage());
+    private PushGrpc.Push2UserResponse buildResponse(PushGrpc.ResponseCode code,
+                                                     boolean success,
+                                                     String message) {
+        return PushGrpc.Push2UserResponse.newBuilder()
+                .setCode(code)
+                .setSuccess(success)
+                .setMsg(message)
+                .build();
     }
 
-    /**
-     * 构建单个用户的推送结果
-     *
-     * @param toId   接收者用户ID
-     * @param code   响应状态码
-     * @param success 是否推送成功
-     * @param msg    结果描述信息
-     * @return PushResult 构建完成的推送结果对象
-     */
     private PushGrpc.PushResult buildPushResult(long toId,
                                                 PushGrpc.ResponseCode code,
                                                 boolean success,
-                                                String msg) {
+                                                String message) {
         return PushGrpc.PushResult.newBuilder()
                 .setToId(toId)
                 .setCode(code)
                 .setSuccess(success)
-                .setMsg(msg)
+                .setMsg(message)
                 .build();
     }
 
-    /**
-     * 构建单用户推送响应。
-     *
-     * @param code 响应码
-     * @param success 是否成功
-     * @param msg 结果说明
-     * @return 单用户推送响应
-     */
-    private PushGrpc.Push2UserResponse buildResponse(PushGrpc.ResponseCode code,
-                                                     boolean success,
-                                                     String msg) {
-        return PushGrpc.Push2UserResponse.newBuilder()
-                .setCode(code)
-                .setSuccess(success)
-                .setMsg(msg)
-                .build();
-    }
-
-    /**
-     * 构建批量推送响应
-     * 
-     * 统计成功和失败数量，组装完整的批量响应结果。
-     *
-     * @param results 所有用户的推送结果列表
-     * @return Push2UsersResponse 构建完成的批量推送响应对象
-     */
     private PushGrpc.Push2UsersResponse buildBatchResponse(List<PushGrpc.PushResult> results) {
-        // 统计成功推送数量
         int successCount = 0;
-
         for (PushGrpc.PushResult result : results) {
             if (result.getSuccess()) {
                 successCount++;
             }
         }
-
-        // 计算总数和失败数
-        int total = results.size();
-        int failCount = total - successCount;
-
         return PushGrpc.Push2UsersResponse.newBuilder()
-                .setTotal(total)
+                .setTotal(results.size())
                 .setSuccessCount(successCount)
-                .setFailCount(failCount)
+                .setFailCount(results.size() - successCount)
                 .addAllResults(results)
                 .build();
     }
 
-    /**
-     * 构建完整的推送消息
-     * 
-     * 根据目标用户ID和消息体构建包含消息头和消息体的完整消息。
-     *
-     * @param toId    接收者用户ID
-     * @param message 原始消息体
-     * @return CompleteMessage 构建完成的完整消息对象
-     */
     private CompleteMessage buildPushMessage(long toId, PushGrpc.PushMessageBody message) {
         return CompleteMessage.newBuilder()
-                // 设置消息头
                 .setPacketHeader(PacketHeader.newBuilder()
                         .setUid(toId)
                         .setMessageType(message.getMessageType())
                         .build())
-                // 设置消息体
                 .setPacketBody(PacketBody.newBuilder()
                         .setFromUserId(message.getFromUserId())
                         .setToId(toId)
@@ -408,20 +478,23 @@ public class PushServiceImpl extends PushServiceGrpc.PushServiceImplBase {
                 .build();
     }
 
-    /**
-     * 已解析出的本地用户推送任务。
-     */
-    private static class LocalPushTask {
-        private final long toId;
-        private final ChannelHandlerContext ctx;
+    private <T> void complete(StreamObserver<T> responseObserver, T response) {
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
 
-        /**
-         * @param toId 接收者用户 ID
-         * @param ctx 接收者当前 Channel 上下文
-         */
-        private LocalPushTask(long toId, ChannelHandlerContext ctx) {
+    private static final class LocalPushTask {
+        private final long toId;
+        private final ChannelHandlerContext context;
+
+        private LocalPushTask(long toId, ChannelHandlerContext context) {
             this.toId = toId;
-            this.ctx = ctx;
+            this.context = context;
         }
+    }
+
+    private static final class RoutingPlan {
+        private final List<LocalPushTask> localTasks = new ArrayList<>();
+        private final Map<Integer, List<Long>> remoteMachineUsers = new HashMap<>();
     }
 }

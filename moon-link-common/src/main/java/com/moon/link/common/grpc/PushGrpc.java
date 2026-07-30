@@ -5772,11 +5772,14 @@ public final class PushGrpc {
       "\n\004code\030\002 \001(\0162\r.ResponseCode\022\017\n\007success\030\003" +
       " \001(\010\022\013\n\003msg\030\004 \001(\t*W\n\014ResponseCode\022\013\n\007SUC" +
       "CESS\020\000\022\020\n\014USER_OFFLINE\020\001\022\024\n\020CHANNEL_INAC" +
-      "TIVE\020\002\022\022\n\016INTERNAL_ERROR\020\0032x\n\013PushServic" +
-      "e\0222\n\tPush2User\022\021.Push2UserRequest\032\022.Push" +
-      "2UserResponse\0225\n\nPush2Users\022\022.Push2Users" +
-      "Request\032\023.Push2UsersResponseB\033\n\031com.moon" +
-      ".link.common.grpcb\006proto3"
+      "TIVE\020\002\022\022\n\016INTERNAL_ERROR\020\0032\353\001\n\013PushServi" +
+      "ce\0222\n\tPush2User\022\021.Push2UserRequest\032\022.Pus" +
+      "h2UserResponse\0225\n\nPush2Users\022\022.Push2User" +
+      "sRequest\032\023.Push2UsersResponse\0226\n\rPushLoc" +
+      "alUser\022\021.Push2UserRequest\032\022.Push2UserRes" +
+      "ponse\0229\n\016PushLocalUsers\022\022.Push2UsersRequ" +
+      "est\032\023.Push2UsersResponseB\033\n\031com.moon.lin" +
+      "k.common.grpcb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,

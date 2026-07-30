@@ -25,6 +25,20 @@ service PushService {
    * @return response 批量推送响应，包含统计结果和每个用户的推送详情
    */
   rpc Push2Users(Push2UsersRequest) returns (Push2UsersResponse);
+
+  /**
+   * 仅在当前 MoonLink 节点查找并推送给指定用户
+   *
+   * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+   */
+  rpc PushLocalUser(Push2UserRequest) returns (Push2UserResponse);
+
+  /**
+   * 仅在当前 MoonLink 节点批量查找并推送给指定用户
+   *
+   * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+   */
+  rpc PushLocalUsers(Push2UsersRequest) returns (Push2UsersResponse);
 }
 
 /**

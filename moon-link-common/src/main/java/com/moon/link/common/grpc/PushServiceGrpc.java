@@ -82,6 +82,68 @@ public final class PushServiceGrpc {
     return getPush2UsersMethod;
   }
 
+  private static volatile io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UserRequest,
+      com.moon.link.common.grpc.PushGrpc.Push2UserResponse> getPushLocalUserMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "PushLocalUser",
+      requestType = com.moon.link.common.grpc.PushGrpc.Push2UserRequest.class,
+      responseType = com.moon.link.common.grpc.PushGrpc.Push2UserResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UserRequest,
+      com.moon.link.common.grpc.PushGrpc.Push2UserResponse> getPushLocalUserMethod() {
+    io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UserRequest, com.moon.link.common.grpc.PushGrpc.Push2UserResponse> getPushLocalUserMethod;
+    if ((getPushLocalUserMethod = PushServiceGrpc.getPushLocalUserMethod) == null) {
+      synchronized (PushServiceGrpc.class) {
+        if ((getPushLocalUserMethod = PushServiceGrpc.getPushLocalUserMethod) == null) {
+          PushServiceGrpc.getPushLocalUserMethod = getPushLocalUserMethod =
+              io.grpc.MethodDescriptor.<com.moon.link.common.grpc.PushGrpc.Push2UserRequest, com.moon.link.common.grpc.PushGrpc.Push2UserResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "PushLocalUser"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  com.moon.link.common.grpc.PushGrpc.Push2UserRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  com.moon.link.common.grpc.PushGrpc.Push2UserResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new PushServiceMethodDescriptorSupplier("PushLocalUser"))
+              .build();
+        }
+      }
+    }
+    return getPushLocalUserMethod;
+  }
+
+  private static volatile io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UsersRequest,
+      com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> getPushLocalUsersMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "PushLocalUsers",
+      requestType = com.moon.link.common.grpc.PushGrpc.Push2UsersRequest.class,
+      responseType = com.moon.link.common.grpc.PushGrpc.Push2UsersResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UsersRequest,
+      com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> getPushLocalUsersMethod() {
+    io.grpc.MethodDescriptor<com.moon.link.common.grpc.PushGrpc.Push2UsersRequest, com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> getPushLocalUsersMethod;
+    if ((getPushLocalUsersMethod = PushServiceGrpc.getPushLocalUsersMethod) == null) {
+      synchronized (PushServiceGrpc.class) {
+        if ((getPushLocalUsersMethod = PushServiceGrpc.getPushLocalUsersMethod) == null) {
+          PushServiceGrpc.getPushLocalUsersMethod = getPushLocalUsersMethod =
+              io.grpc.MethodDescriptor.<com.moon.link.common.grpc.PushGrpc.Push2UsersRequest, com.moon.link.common.grpc.PushGrpc.Push2UsersResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "PushLocalUsers"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  com.moon.link.common.grpc.PushGrpc.Push2UsersRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  com.moon.link.common.grpc.PushGrpc.Push2UsersResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new PushServiceMethodDescriptorSupplier("PushLocalUsers"))
+              .build();
+        }
+      }
+    }
+    return getPushLocalUsersMethod;
+  }
+
   /**
    * Creates a new async stub that supports all call types for the service
    */
@@ -160,6 +222,30 @@ public final class PushServiceGrpc {
         io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getPush2UsersMethod(), responseObserver);
     }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    default void pushLocalUser(com.moon.link.common.grpc.PushGrpc.Push2UserRequest request,
+        io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UserResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getPushLocalUserMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点批量查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    default void pushLocalUsers(com.moon.link.common.grpc.PushGrpc.Push2UsersRequest request,
+        io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getPushLocalUsersMethod(), responseObserver);
+    }
   }
 
   /**
@@ -226,6 +312,32 @@ public final class PushServiceGrpc {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getPush2UsersMethod(), getCallOptions()), request, responseObserver);
     }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public void pushLocalUser(com.moon.link.common.grpc.PushGrpc.Push2UserRequest request,
+        io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UserResponse> responseObserver) {
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
+          getChannel().newCall(getPushLocalUserMethod(), getCallOptions()), request, responseObserver);
+    }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点批量查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public void pushLocalUsers(com.moon.link.common.grpc.PushGrpc.Push2UsersRequest request,
+        io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> responseObserver) {
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
+          getChannel().newCall(getPushLocalUsersMethod(), getCallOptions()), request, responseObserver);
+    }
   }
 
   /**
@@ -273,6 +385,30 @@ public final class PushServiceGrpc {
     public com.moon.link.common.grpc.PushGrpc.Push2UsersResponse push2Users(com.moon.link.common.grpc.PushGrpc.Push2UsersRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getPush2UsersMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public com.moon.link.common.grpc.PushGrpc.Push2UserResponse pushLocalUser(com.moon.link.common.grpc.PushGrpc.Push2UserRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getPushLocalUserMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点批量查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public com.moon.link.common.grpc.PushGrpc.Push2UsersResponse pushLocalUsers(com.moon.link.common.grpc.PushGrpc.Push2UsersRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getPushLocalUsersMethod(), getCallOptions(), request);
     }
   }
 
@@ -324,10 +460,38 @@ public final class PushServiceGrpc {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getPush2UsersMethod(), getCallOptions()), request);
     }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public com.google.common.util.concurrent.ListenableFuture<com.moon.link.common.grpc.PushGrpc.Push2UserResponse> pushLocalUser(
+        com.moon.link.common.grpc.PushGrpc.Push2UserRequest request) {
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
+          getChannel().newCall(getPushLocalUserMethod(), getCallOptions()), request);
+    }
+
+    /**
+     * <pre>
+     **
+     * 仅在当前 MoonLink 节点批量查找并推送给指定用户
+     * 该接口供 MoonLink 节点间调用，不执行 Redis 查询和跨节点转发
+     * </pre>
+     */
+    public com.google.common.util.concurrent.ListenableFuture<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse> pushLocalUsers(
+        com.moon.link.common.grpc.PushGrpc.Push2UsersRequest request) {
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
+          getChannel().newCall(getPushLocalUsersMethod(), getCallOptions()), request);
+    }
   }
 
   private static final int METHODID_PUSH2USER = 0;
   private static final int METHODID_PUSH2USERS = 1;
+  private static final int METHODID_PUSH_LOCAL_USER = 2;
+  private static final int METHODID_PUSH_LOCAL_USERS = 3;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -352,6 +516,14 @@ public final class PushServiceGrpc {
           break;
         case METHODID_PUSH2USERS:
           serviceImpl.push2Users((com.moon.link.common.grpc.PushGrpc.Push2UsersRequest) request,
+              (io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse>) responseObserver);
+          break;
+        case METHODID_PUSH_LOCAL_USER:
+          serviceImpl.pushLocalUser((com.moon.link.common.grpc.PushGrpc.Push2UserRequest) request,
+              (io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UserResponse>) responseObserver);
+          break;
+        case METHODID_PUSH_LOCAL_USERS:
+          serviceImpl.pushLocalUsers((com.moon.link.common.grpc.PushGrpc.Push2UsersRequest) request,
               (io.grpc.stub.StreamObserver<com.moon.link.common.grpc.PushGrpc.Push2UsersResponse>) responseObserver);
           break;
         default:
@@ -386,6 +558,20 @@ public final class PushServiceGrpc {
               com.moon.link.common.grpc.PushGrpc.Push2UsersRequest,
               com.moon.link.common.grpc.PushGrpc.Push2UsersResponse>(
                 service, METHODID_PUSH2USERS)))
+        .addMethod(
+          getPushLocalUserMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              com.moon.link.common.grpc.PushGrpc.Push2UserRequest,
+              com.moon.link.common.grpc.PushGrpc.Push2UserResponse>(
+                service, METHODID_PUSH_LOCAL_USER)))
+        .addMethod(
+          getPushLocalUsersMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              com.moon.link.common.grpc.PushGrpc.Push2UsersRequest,
+              com.moon.link.common.grpc.PushGrpc.Push2UsersResponse>(
+                service, METHODID_PUSH_LOCAL_USERS)))
         .build();
   }
 
@@ -436,6 +622,8 @@ public final class PushServiceGrpc {
               .setSchemaDescriptor(new PushServiceFileDescriptorSupplier())
               .addMethod(getPush2UserMethod())
               .addMethod(getPush2UsersMethod())
+              .addMethod(getPushLocalUserMethod())
+              .addMethod(getPushLocalUsersMethod())
               .build();
         }
       }
