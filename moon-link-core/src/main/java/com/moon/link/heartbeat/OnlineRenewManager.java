@@ -62,7 +62,10 @@ public final class OnlineRenewManager {
     }
 
     /**
-     * 停止定时任务，并尽力刷新尚未提交的活跃用户。
+     * 停止定时任务并丢弃尚未提交的续期标记。
+     * <p>
+     * 网关即将下线时不能继续延长在线路由 TTL；连接路由应由连接关闭流程主动删除，
+     * 异常情况下再由 Redis TTL 兜底。
      */
     public static void shutdown() {
         if (!STARTED.compareAndSet(true, false)) {
@@ -78,7 +81,7 @@ public final class OnlineRenewManager {
             Thread.currentThread().interrupt();
             RENEW_EXECUTOR.shutdownNow();
         }
-        flushSafely();
+        drainActiveUserIds();
     }
 
     private static void validateConfig() {
