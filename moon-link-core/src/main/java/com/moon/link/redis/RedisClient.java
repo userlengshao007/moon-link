@@ -10,6 +10,7 @@ import redis.clients.jedis.Response;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -87,16 +88,29 @@ public final class RedisClient {
     }
 
     /**
-     * 刷新用户在线状态的过期时间。
+     * 使用 Pipeline 批量刷新用户在线路由的过期时间。
+     * <p>
+     * Pipeline 不会减少 Redis 命令数量，但会批量发送命令并统一读取响应，
+     * 从而减少客户端与 Redis 之间的网络往返次数。
      *
-     * @param userId 用户 ID
-     * @return 是否成功刷新
+     * @param userIds 待续期的用户 ID 集合
+     * @return Pipeline 是否成功执行
      */
-    public static boolean expireUserOnline(long userId) {
+    public static boolean batchExpireUserOnline(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return true;
+        }
+
         try (Jedis jedis = JEDIS_POOL.getResource()) {
-            return jedis.expire(userKey(userId), RedisConfig.ONLINE_EXPIRE_SECONDS) == 1;
+            Pipeline pipeline = jedis.pipelined();
+            for (Long userId : userIds) {
+                pipeline.expire(userKey(userId), RedisConfig.ONLINE_EXPIRE_SECONDS);
+            }
+            pipeline.sync();
+            return true;
         } catch (Exception e) {
-            log.warn("[Redis] expire user online failed, userId: {}, error: {}", userId, e.getMessage());
+            log.warn("[Redis] batch expire user online failed, size: {}, error: {}",
+                    userIds.size(), e.getMessage());
             return false;
         }
     }

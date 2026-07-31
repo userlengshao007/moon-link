@@ -14,6 +14,12 @@ public final class RedisConfig {
     public static final int REDIS_TIMEOUT_MILLIS = Integer.getInteger("moon.link.redis.timeoutMillis", 2000);
     /** 用户在线状态的过期时间，单位为秒。 */
     public static final int ONLINE_EXPIRE_SECONDS = Integer.getInteger("moon.link.redis.onlineExpireSeconds", 300);
+    /** 在线用户批量续期任务执行间隔，单位为秒。 */
+    public static final int ONLINE_RENEW_INTERVAL_SECONDS =
+            Integer.getInteger("moon.link.redis.onlineRenewIntervalSeconds", 90);
+    /** 单次 Redis Pipeline 包含的最大续期命令数。 */
+    public static final int ONLINE_RENEW_BATCH_SIZE =
+            Integer.getInteger("moon.link.redis.onlineRenewBatchSize", 1000);
 
     /** 分配节点机器 ID 使用的自增键。 */
     public static final String MACHINE_ID_KEY = "moon-link:machine:id";

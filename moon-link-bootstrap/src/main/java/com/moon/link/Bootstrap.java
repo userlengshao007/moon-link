@@ -3,6 +3,7 @@ package com.moon.link;
 import com.moon.link.cache.LinkClusterManager;
 import com.moon.link.config.NettyConfig;
 import com.moon.link.grpc.GrpcServer;
+import com.moon.link.heartbeat.OnlineRenewManager;
 import com.moon.link.kafka.KafkaProducerManager;
 import com.moon.link.link.LinkConfig;
 import com.moon.link.netty.NettyServer;
@@ -32,7 +33,11 @@ public class Bootstrap {
         NacosRegisterCenter registerCenter = new NacosRegisterCenter();
         registerCenter.init();
         registerCenter.subscribe(LinkClusterManager::updateInstances);
-        Runtime.getRuntime().addShutdownHook(new Thread(KafkaProducerManager::shutdown));
+        OnlineRenewManager.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            OnlineRenewManager.shutdown();
+            KafkaProducerManager.shutdown();
+        }, "moon-link-shutdown"));
 
         // 在独立线程中启动Netty服务器
         new Thread(() -> new NettyServer(NettyConfig.NETTY_PORT).start(), "netty-server").start();
