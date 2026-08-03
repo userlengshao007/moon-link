@@ -25,7 +25,7 @@ public class MessageProtocolEncoder extends MessageToByteEncoder<CompleteMessage
      */
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext, CompleteMessage message, ByteBuf out) throws Exception {
-        log.info("[Outbound-encodeData] uid: {}, messageType: {}",
+        log.debug("[Outbound-encodeData] uid: {}, messageType: {}",
                 message.getPacketHeader().getUid(), message.getPacketHeader().getMessageType());
         // 依次序列化
         // 包边界
@@ -60,7 +60,7 @@ public class MessageProtocolEncoder extends MessageToByteEncoder<CompleteMessage
 
         // 序列化包体长度
         out.writeInt(dataBytes.length);
-        log.info("[HandledDataLength] 压缩+加密完 包体长度: " + dataBytes.length);
+        log.debug("[HandledDataLength] 压缩+加密完 包体长度: {}", dataBytes.length);
 
         // 序列化包头
         out.writeBytes(headerBytes);

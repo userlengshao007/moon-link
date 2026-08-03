@@ -80,7 +80,7 @@ public class MessageProtocolDecoder extends ByteToMessageDecoder {
         // header data: 
         PacketHeader packetHeader = PacketHeader.parseFrom(headerBytes);
 
-        log.info("[DecodeMessageProtocol] uid: {}, messageType: {}",
+        log.debug("[DecodeMessageProtocol] uid: {}, messageType: {}",
                 packetHeader.getUid(), packetHeader.getMessageType());
 
         // 对 dataBytes 先解密
